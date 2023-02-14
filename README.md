@@ -14,7 +14,7 @@ For the emulator, you can download **[the latest version of Bizhawk](https://tas
 
 Next, open your legally obtained copy of the Quest 64 ROM and configure your controller until everything looks good.  
 
-As an optional last step, download the `HelloWorld.lua` script and open it with Bizhawk's Lua Console, available via `Tools -> Lua Console`.  Aside from seeing a simple `"Hello World!"` in the console, it's good to become familiar with this step, as we will repeat this process when loading in practice scripts etc.
+As an optional last step, **[download the HelloWorld.lua script](https://raw.githubusercontent.com/vbhayden/Quest-64-Lua-Resources/master/HelloWorld.lua)** and open it with Bizhawk's Lua Console, available via `Tools -> Lua Console`.  Aside from seeing a simple `"Hello World!"` in the console, it's good to become familiar with this step, as we will repeat this process when loading in practice scripts etc.
 
 ## Death Dupe Practice 💀
 
