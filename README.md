@@ -41,6 +41,10 @@ There are 5 practice states included in the zip file:
 - <kbd>F4</kbd> Encounter with 1x Hell Hound.
 - <kbd>F5</kbd> Encounter with Parassault and Bumpershoot.
 
+State 1 is for practicing the encounter timing.
+
+States 3-5 are for practicing the actual execution of the Death Dupe once a valid encounter has been triggered.  The Lua script will display the basic steps, but it's important to experiment with different timings to understand why things happen when they do etc.  
+
 ### Practicing with the Lua
 
 To more reliably set up the Death Dupe, the Lua script will display a few values on the screen and provides feedback for how accurately we are satisfying the Death Dupe conditions.  
