@@ -254,8 +254,8 @@ function PrintDeathDupeInstructions(index)
         on a spirit while the spell
         selection menu is open.
 
-        3. Cast a spell just before
-        the intro camera ends.
+        3. Cast a spell as soon
+        as the HUD slides in.
 
         4. Open the item menu.
 
