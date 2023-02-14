@@ -52,6 +52,6 @@ For some context, the Death Dupe requires us to trigger an encounter with a few 
 4. We can be killed instantly during the encounter
 5. We can escape the encounter
 
-Since conditions 4 and 5 are already satisfied and condition 3 is random due to Were Hare and Big Mouth being slow, we are left to practice the act of triggering an encounter while standing on a spirit with the spell menu open.
+Since conditions 4 and 5 are already satisfied and condition 3 is random due to Were Hare and Big Mouth being in the encounter table, we are left to practice the act of triggering an encounter while standing on a spirit with the spell menu open.
 
 The Lua script will display when the next encounter will trigger, allowing you to work out the timing for accumulating distance and attempting to trigger one on the spirit.
