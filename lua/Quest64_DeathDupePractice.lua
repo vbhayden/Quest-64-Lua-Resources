@@ -257,7 +257,7 @@ function PrintDeathDupeInstructions(index)
         3. Cast a spell as soon
         as the HUD slides in.
 
-        4. Open the item menu.
+        4. Open the item menu
 
         5. Once Brian takes damage,
         use the Fresh Bread just as
@@ -267,6 +267,17 @@ function PrintDeathDupeInstructions(index)
         6. Escape the encounter.
 
         7. Mash the Spirit.
+
+
+        Note:
+        It is possible to move 
+        with the item menu active.
+
+        Ideally, we will trigger
+        the death animation and
+        use the Fresh Bread while
+        Brian has already escaped
+        the battle.
     ]]
 
     local lineIndex = 0
