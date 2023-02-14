@@ -10,7 +10,7 @@ To use these resources, you will need the latest version of the Bizhawk emulator
 
 ## Emulator Setup
 
-For the emulator, you can download **[the latest version of Bizhawk](https://tasvideos.org/BizHawk/ReleaseHistory#Bizhawk28)** from tasvideos.org.  It shouldn't need to be installed and can run just fine from within a folder.
+For the emulator, you can **[download the latest version of Bizhawk](https://tasvideos.org/BizHawk/ReleaseHistory#Bizhawk28)** from tasvideos.org.  It shouldn't need to be installed and can run just fine from within a folder.
 
 Next, open your legally obtained copy of the Quest 64 ROM and configure your controller until everything looks good.  
 
