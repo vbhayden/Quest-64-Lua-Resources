@@ -28,7 +28,7 @@ To get started:
 - Copy the practice states into your Bizhawk folder, the path should be `<Your Bizhawk>/N64/State`
 - **[Download the practice script](https://raw.githubusercontent.com/vbhayden/Quest-64-Lua-Resources/master/lua/Quest64_DeathDupePractice.lua)** from this repo
 - Load the practice script into your Lua Console
-- (Optional) Ctrl+S to save the Lua Session for faster loading next time
+- (Optional) <kbd>CTRL</kbd>+<kbd>S</kbd> to save the Lua Session for faster loading next time
 
 Once those are complete, loading the Quest 64 ROM and pressing <kbd>F1</kbd> should present a low-health Brian ready to escape an encounter.
 
