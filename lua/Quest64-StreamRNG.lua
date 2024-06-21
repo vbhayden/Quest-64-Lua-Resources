@@ -11,6 +11,8 @@ MEM_AGI_BATTLE = 0x7BCA0
 MEM_ENCOUNTER_STEP_DISTANCE = 0x8C574
 MEM_ENCOUNTER_ACCUMULATION = 0x8C578
 
+local COLOR_FOR_NEXT_ENCOUNTER = true
+
 GUI_CHAR_WIDTH = 10
 GUI_PADDING_RIGHT = 160 + 100
 
@@ -28,6 +30,10 @@ local function GuiText(row_index, text)
     GuiTextWithColor(row_index, text, "white")
 end
 
+local function GuiTextColor(row_index, text, color)
+    GuiTextWithColor(row_index, text, color)
+end
+
 local function GuiTextRight(row_index, text)
     
     local borderWidth = client.borderwidth();
@@ -36,6 +42,16 @@ local function GuiTextRight(row_index, text)
 
     gui.text(resolvedOffset, 20 + row_index * 15, text)
 end
+
+local function GuiTextRightColor(row_index, text, color)
+    
+    local borderWidth = client.borderwidth();
+    local screenWidth = client.screenwidth();
+    local resolvedOffset = screenWidth - borderWidth - GUI_PADDING_RIGHT
+
+    gui.text(resolvedOffset, 20 + row_index * 15, text, color)
+end
+
 
 local function GuiTextCenterWithColor(row_index, text, color)
     local length = string.len(text)
@@ -136,25 +152,20 @@ local function PrintPreviewSeedInfo(row, previewIndex, seed, GuiFunction)
 
     local rng, willTrigger, roll, accumulation = CheckIfEncounterWillTriggerForSeed(seed, previewIndex)
 
+    local color = "white"
+    if COLOR_FOR_NEXT_ENCOUNTER then
+        local accumulation = memory.read_u16_be(MEM_ENCOUNTER_ACCUMULATION)
+        if roll < GetEncounterAccumulation() + 50 then
+            color = "cyan" 
+        end
+    end
+
     local rngString = string.format("%08X ", rng)
     local indexString = string.format("%02d", previewIndex)
 
     local battleString = Ternary(willTrigger, "FIGHT", "     ")
 
-    -- GuiFunction(row, string.format("%s - %s, %04d vs. %04d --> %s", indexString, rngString, roll, accumulation, battleString))
-    GuiFunction(row, string.format("%s - %s, --> %s", indexString, rngString, battleString))
-end
-
-local function PrintPreviewSeedRoll(row, previewIndex, seed, GuiFunction)
-
-    local rng, roll = CheckSeedRollFrom100(seed, previewIndex)
-
-    local rngString = string.format("%08X ", rng)
-    local indexString = string.format("%02d", previewIndex)
-    local highlightString = Ternary(roll < 59, "  ", "XX")
-
-    -- GuiFunction(row, string.format("%s - %s, %04d vs. %04d --> %s", indexString, rngString, roll, accumulation, battleString))
-    GuiFunction(row, string.format("%s - %s, --> %d %s", indexString, rngString, roll, highlightString))
+    GuiFunction(row, string.format("%s: %s-> %04s %s", indexString, rngString, roll, battleString), color)
 end
 
 local function streamRNG(index, historyLength, previewLength, onLeft)
@@ -163,7 +174,7 @@ local function streamRNG(index, historyLength, previewLength, onLeft)
     local previousRNG = GetCurrentRNG()
 
     local table = {}
-    local GuiFunction = Ternary(onLeft, GuiText, GuiTextRight)
+    local GuiFunction = Ternary(onLeft, GuiTextColor, GuiTextRightColor)
 
     while true do
 
@@ -183,27 +194,13 @@ local function streamRNG(index, historyLength, previewLength, onLeft)
         -- PrintPreviewSeedInfo(index, 0, currentRNG, GuiFunction)
 
         for key, value in pairs(table) do
-            
-            -- local px = x
-            -- local py = y + 15 * (key + 1) + 10
-
             GuiFunction(index + key + 1 + 1, "" .. value)
         end
         
         for previewIndex=1, previewLength do
             PrintPreviewSeedInfo(index - previewIndex - 1, previewIndex, currentRNG, GuiFunction)   
-            -- PrintPreviewSeedRoll(index - previewIndex - 1, previewIndex, currentRNG, GuiFunction)   
         end        
         
-        -- local seed = GetCurrentRNG()
-        -- local mammonSeed = GetNextRNG(seed)
-        -- local mammonRoll = SimulateRNGCall(mammonSeed, 3)
-
-        -- local mammonSpells = {"Light", "Waves", "Arrows"}
-        -- local predictedSpell = mammonSpells[mammonRoll + 1]
-        
-        -- GuiTextCenterWithColor(10, string.format("Next Spell: %s", predictedSpell), "white")
-
         emu.frameadvance()
 
         previousRNG = currentRNG
