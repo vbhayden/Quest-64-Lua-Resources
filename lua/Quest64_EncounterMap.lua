@@ -20,7 +20,7 @@
 --
 local MAP_GRID_WIDTH = 18
 local MAP_GRID_HEIGHT = 11
-local MAP_GRID_UNIT_SPACING = 10
+local MAP_GRID_UNIT_SPACING = 8
 local MAP_ANCHOR_X = 10
 local MAP_ANCHOR_Y = 16
 
@@ -63,6 +63,10 @@ local ENCOUNTER_FEEDBACK_DURATION_MS = 1000
 --                                                             --
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
 -- Memory Values
+local MEM_MAP_ID = 0x8536B
+local MEM_SUBMAP_ID = 0x8536F
+local MEM_PTR_REGION_DATA = 0x08C560
+local MEM_PTR_CIRCLE_DATA = 0x08C564
 local MEM_ENCOUNTER_STEP_DISTANCE = 0x8C574
 local MEM_ENCOUNTER_ACCUMULATION = 0x8C578
 local MEM_CAMERA_ROTATION_Y = 0x86DE8
@@ -163,8 +167,8 @@ end
 
 local function GetEncounterPointers()
 
-    local ptr_region_data = GetPointerFromAddress(0x08C560)
-    local ptr_circle_data = GetPointerFromAddress(0x08C564)
+    local ptr_region_data = GetPointerFromAddress(MEM_PTR_REGION_DATA)
+    local ptr_circle_data = GetPointerFromAddress(MEM_PTR_CIRCLE_DATA)
 
     return {
         ptr_region_start = GetPointerFromAddress(ptr_region_data),
@@ -314,8 +318,8 @@ local function GuiCharRightWithColorExplicit(row_index, char_index, char, color,
 end
 
 local function GetMapIDs()
-    local mapID = memory.readbyte(0x8536B, "RDRAM")
-    local subMapID = memory.readbyte(0x8536F, "RDRAM")
+    local mapID = memory.readbyte(MEM_MAP_ID, "RDRAM")
+    local subMapID = memory.readbyte(MEM_SUBMAP_ID, "RDRAM")
 
     return mapID, subMapID
 end

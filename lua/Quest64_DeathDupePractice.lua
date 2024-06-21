@@ -8,7 +8,7 @@ MEM_SPELL_MENU_DEPTH = 0x7bbd5
 MEM_COMBAT_ENEMY_COUNT = 0x07C993
 
 GUI_CHAR_WIDTH = 10
-GUI_PADDING_RIGHT = 240 + 60
+GUI_PADDING_RIGHT = 240 + 100
 
 function Trim(str)
     return string.match(str, "^%s*(.-)%s*$")
@@ -56,7 +56,7 @@ function GuiTextRight(row_index, text)
     gui.text(resolvedOffset, 20 + row_index * 15, text)
 end
 
-function GuiTextBottomCenterWithColor(row_index, text, color)
+function GuiTextCenterWithColor(row_index, text, color)
     local length = string.len(text)
     local halfWidth = GUI_CHAR_WIDTH * length / 2
 
@@ -67,7 +67,7 @@ function GuiTextBottomCenterWithColor(row_index, text, color)
 end
 
 function GuiTextCenter(row_index, text, color)
-    return GuiTextBottomCenterWithColor(row_index, text, "white")
+    return GuiTextCenterWithColor(row_index, text, "white")
 end
 
 function Ternary ( cond , T , F )
@@ -153,33 +153,42 @@ function GetRecentSuccessColor(percent)
     return "red"
 end
 
-function PrintMiscData(index)
-
-    local encounterCount = memory.read_u16_be(0x8C578, "RDRAM");
+function GetRelevantDeathDupeData()
+    
+    local encounterCount = memory.read_u16_be(0x8C578, "RDRAM")
     local encounterAttempts = encounterCount / 50
     local encounterChance = (encounterAttempts + 1) * 2.5
-
+    
     local stepDistance = Round(memory.readfloat(0x8C574, true, "RDRAM"), 1)
     local stepColor = GetStepPromptColor(stepDistance)
     local currentlyMoving = (stepDistance ~= LastStepDistance)
-
-    GuiText(index + 0, "Flags:")
-    GuiText(index + 1, "--------------------------")
     
     local spellMenuOpen = IsSpellMenuOpen()
     local currentlyOnSpirit = IsOnSpirit()
     local recentSuccessPercent = GetRecentSuccessPercent()
-    local recentSuccessColor = GetRecentSuccessColor(recentSuccessPercent)
-
-    GuiTextWithColor(index + 3, "On Spirit: " .. Ternary(currentlyOnSpirit, "Yes", "No"), Ternary(currentlyOnSpirit, "cyan", "yellow"));
-    GuiTextWithColor(index + 4, "Menu Open: " .. Ternary(spellMenuOpen, "Yes", "No"), Ternary(spellMenuOpen, "cyan", "yellow"));
-
-    GuiTextWithColor(index + 6, "Recent Accuracy: " .. recentSuccessPercent .. "%", recentSuccessColor)
-    
     local currentTime = os.time()
 
-    if stepDistance < LastStepDistance then
-        LastInputSuccess = spellMenuOpen and currentlyOnSpirit
+    return {
+        encounterCount = encounterCount,
+        encounterAttempts = encounterAttempts,
+        encounterChance = encounterChance,
+    
+        stepDistance = stepDistance,
+        stepColor = stepColor,
+        currentlyMoving = currentlyMoving,
+        
+        spellMenuOpen = spellMenuOpen,
+        currentlyOnSpirit = currentlyOnSpirit,
+        recentSuccessPercent = recentSuccessPercent,
+        currentTime = currentTime
+    }
+
+end
+
+function DetermineFeedback(data)
+
+    if data.stepDistance < LastStepDistance then
+        LastInputSuccess = data.spellMenuOpen and data.currentlyOnSpirit
         if LastInputSuccess then
 
             MessageColor = "cyan"
@@ -188,7 +197,7 @@ function PrintMiscData(index)
 
             AddToRecentTable(true)
         
-        elseif not currentlyOnSpirit then
+        elseif not data.currentlyOnSpirit then
 
             MessageColor = "yellow"
             CurrentStreak = 0
@@ -196,7 +205,7 @@ function PrintMiscData(index)
             
             AddToRecentTable(false)
 
-        elseif not spellMenuOpen then
+        elseif not data.spellMenuOpen then
 
             MessageColor = "yellow"
             CurrentStreak = 0
@@ -205,12 +214,20 @@ function PrintMiscData(index)
             AddToRecentTable(false)
         end
         
-        MessageShownAt = currentTime
+        MessageShownAt = data.currentTime
     end
+end
 
-    LastStepDistance = stepDistance
-    WasSpellMenuOpen = spellMenuOpen
+function PrintMiscData(index, data)
 
+    GuiText(index + 0, "Flags:")
+    GuiText(index + 1, "--------------------------")
+
+    GuiTextWithColor(index + 3, "On Spirit: " .. Ternary(data.currentlyOnSpirit, "Yes", "No"), Ternary(data.currentlyOnSpirit, "cyan", "yellow"));
+    GuiTextWithColor(index + 4, "Menu Open: " .. Ternary(data.spellMenuOpen, "Yes", "No"), Ternary(data.spellMenuOpen, "cyan", "yellow"));
+
+    GuiTextWithColor(index + 6, "Recent Accuracy: " .. data.recentSuccessPercent .. "%", data.recentSuccessColor)
+    
     return 7
 end
 
@@ -232,9 +249,9 @@ function PrintDeathDupeAbout(index)
     -- - Item menu must be open.
     -- - The enemy should teleport.
 
-    local lineIndex = 0
+    local lineIndex = index + 0
     for line in string.gmatch(info, "(.-)\n") do
-        GuiTextRight(index + lineIndex, Trim(line))
+        GuiTextRight(lineIndex, Trim(line))
         lineIndex = lineIndex + 1
      end
      
@@ -289,22 +306,15 @@ function PrintDeathDupeInstructions(index)
      return lineIndex;
 end
 
-function PrintStepTracker()
+function PrintStepTracker(data)
     
-    local encounterCount = memory.read_u16_be(0x8C578, "RDRAM");
-    local encounterAttempts = encounterCount / 50
-    local encounterChance = (encounterAttempts + 1) * 2.5
-
-    local stepDistance = Round(memory.readfloat(0x8C574, true, "RDRAM"), 1)
-    local stepColor = GetStepPromptColor(stepDistance)
-
     local stepDivisor = 2.5
     local blockCount = 50 / stepDivisor
 
-    local progress = Round(stepDistance / stepDivisor, 0);
+    local progress = Round(data.stepDistance / stepDivisor, 0);
     
-    GuiTextBottomCenterWithColor(0, "Encounter Chance: " .. encounterChance .. "%", "white")
-    GuiTextBottomCenterWithColor(1, "|" .. string.rep("=", progress) .. string.rep(" ", blockCount - progress) .. "|" , stepColor)
+    GuiTextCenterWithColor(0, "Encounter Chance: " .. data.encounterChance .. "%", "white")
+    GuiTextCenterWithColor(1, "|" .. string.rep("=", progress) .. string.rep(" ", blockCount - progress) .. "|" , data.stepColor)
     
     return 3
 end
@@ -321,9 +331,9 @@ function PrintFeedback(index)
             MessageSuccessAlternate = not MessageSuccessAlternate
         end
 
-        GuiTextBottomCenterWithColor(index + 0, "Timing Feedback:", "white")
-        GuiTextBottomCenterWithColor(index + 1, "-----------------------", "white")
-        GuiTextBottomCenterWithColor(index + 2, MostRecentEncounterFeedback, messageColor)
+        GuiTextCenterWithColor(index + 0, "Timing Feedback:", "white")
+        GuiTextCenterWithColor(index + 1, "-----------------------", "white")
+        GuiTextCenterWithColor(index + 2, MostRecentEncounterFeedback, messageColor)
     end
 end
 
@@ -355,7 +365,7 @@ function PrintDeathDupeHeader(index)
         
     -- ]]
 
-    local lineIndex = 9
+    local lineIndex = index + 9
     -- for line in string.gmatch(otherInfo, "(.-)\n") do
     --     GuiText(index + lineIndex, Trim(line))
     --     lineIndex = lineIndex + 1
@@ -404,24 +414,27 @@ while true do
 
     ProcessControls()
 
+    local data = GetRelevantDeathDupeData()
+    DetermineFeedback(data)
+
     local encounterLines = 0
     local aboutLines = 0
     local instructionLines = 0
 
     -- Left side
-    local headerRows = PrintDeathDupeHeader(0)
+    local headerRows = PrintDeathDupeHeader(4)
 
     if ShowExtraData then 
-        encounterLines = PrintMiscData(headerRows + 1)
+        encounterLines = PrintMiscData(headerRows + 1, data)
     end
 
     -- Right side
     if ShowAbout then
-        aboutLines = PrintDeathDupeAbout(1) + 2
+        aboutLines = PrintDeathDupeAbout(10)
     end
 
     if ShowExplanation then 
-        instructionLines = PrintDeathDupeInstructions(aboutLines)
+        instructionLines = PrintDeathDupeInstructions(aboutLines + 3)
     end
 
     -- Center Overlay
@@ -429,12 +442,15 @@ while true do
     local feedbackLines = 0
 
     if ShowStepTracker then
-        trackerLines = PrintStepTracker()
+        trackerLines = PrintStepTracker(data)
     end
 
     if ShowFeedback then
         feedbackLines = PrintFeedback(3)
     end
+    
+    LastStepDistance = data.stepDistance
+    WasSpellMenuOpen = data.spellMenuOpen
 
     emu.frameadvance()
 end

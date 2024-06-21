@@ -18,6 +18,8 @@
 -- want to refer to the bizhawk guides for how it wants you
 -- to name specific keys etc.
 --
+local KB_COPY = "C"
+local KB_PASTE = "V"
 local KB_MOVE_UP = "Up"
 local KB_MOVE_DOWN = "Down"
 local KB_MOVE_LEFT = "Left"
@@ -190,6 +192,10 @@ local function MoveEnemyRelative(x, y, z)
     SetEnemyLocation(brianX + dx * MovementMagnitude, brianZ + dz * MovementMagnitude)
 end
 
+local saved_x = 0
+local saved_y = 0
+local saved_z = 0
+local saved_rotation = 0
 
 local function ProcessKeyboardInput()
 
@@ -227,6 +233,16 @@ local function ProcessKeyboardInput()
         if MovementMagnitude < 1 then
             MovementMagnitude = 1
         end
+    end
+
+    if keys[KB_COPY] == true and PreviousKeys[KB_COPY] ~= true then
+        saved_x, saved_z = GetBrianLocation()
+        saved_rotation = GetBrianDirection()
+    end
+
+    if keys[KB_PASTE] == true and PreviousKeys[KB_PASTE] ~= true then
+        SetBrianLocation(saved_x, saved_z)
+        SetBrianDirection(saved_rotation)
     end
 
     if keys[KB_RESET_ROTATION] == true and PreviousKeys[KB_RESET_ROTATION] ~= true then
@@ -346,23 +362,24 @@ while true do
 
     local speed = math.sqrt(dx * dx + dz * dz)
 
-    GuiText(4, "Brian Mover:")
-    GuiText(5, "  Target:   " .. Ternary(MoveEnemy, "Enemy #" .. MoveEnemyIndex, "Brian"))
-    GuiText(6, "  Movement: " .. MovementMagnitude)
-    GuiText(7, "  Brian X: " .. Round(x, 1))
-    GuiText(8, "  Brian Z: " .. Round(z, 1))
-    GuiText(9, "  Brian Angle: " .. Round(angle, 1))
+    GuiText(0, "Brian Mover:")
+    GuiText(1, "  Target:   " .. Ternary(MoveEnemy, "Enemy #" .. MoveEnemyIndex, "Brian"))
+    GuiText(2, "  Movement: " .. MovementMagnitude)
+    GuiText(3, "  Brian X: " .. Round(x, 1))
+    GuiText(4, "  Brian Z: " .. Round(z, 1))
+    GuiText(5, "  Brian Angle: " .. Round(angle, 1))
+    GuiText(6,  string.format("  Map: %d, Submap: %d", map, submap))
 
-    GuiText(11, "Controls:")
-    GuiText(12, "  Move ^: " .. KB_MOVE_UP)
-    GuiText(13, "  Move v: " .. KB_MOVE_DOWN)
-    GuiText(14, "  Move <: " .. KB_MOVE_LEFT)
-    GuiText(15, "  Move >: " .. KB_MOVE_RIGHT)
-    GuiText(17, "  Move More: " .. KB_MOVEMENT_INCREASE)
-    GuiText(18, "  Move Less: " .. KB_MOVEMENT_DECREASE)
-    GuiText(20, "  Reset Angle: " .. KB_RESET_ROTATION)
-    GuiText(21, "  Swap Target: " .. KB_TOGGLE_TARGET)
-    GuiText(22, "  Next Enemy:  " .. KB_CHANGE_ENENY)
+    GuiText(8, "Controls:")
+    GuiText(9, "  Move ^: " .. KB_MOVE_UP)
+    GuiText(10, "  Move v: " .. KB_MOVE_DOWN)
+    GuiText(11, "  Move <: " .. KB_MOVE_LEFT)
+    GuiText(12, "  Move >: " .. KB_MOVE_RIGHT)
+    GuiText(13, "  Move More: " .. KB_MOVEMENT_INCREASE)
+    GuiText(14, "  Move Less: " .. KB_MOVEMENT_DECREASE)
+    GuiText(15, "  Reset Angle: " .. KB_RESET_ROTATION)
+    GuiText(16, "  Swap Target: " .. KB_TOGGLE_TARGET)
+    GuiText(17, "  Next Enemy:  " .. KB_CHANGE_ENENY)
 
     -- local bx, bz = GetLastCombatPosition()
     -- local bdx = x - bx

@@ -6,6 +6,7 @@ MEM_BRIAN_POSITION_Y = 0x7BAD4
 MAP_ID_BLUE_CAVE = 26
 MAP_ID_CULL_HAZARD = 27
 MAP_ID_BOIL_HOLE = 29
+MAP_ID_BRANNOCH_CASTLE = 30
 
 PIVOT_CULL_HAZARD_X = 936.64978
 PIVOT_CULL_HAZARD_Y = -251.180084
@@ -17,6 +18,11 @@ PIVOT_BLUE_CAVE_RAMP_X = -17
 PIVOT_BLUE_CAVE_RAMP_Y = -18
 PIVOT_BLUE_CAVE_CLIP_X = -36.5
 PIVOT_BLUE_CAVE_CLIP_Y = 5.5
+
+-- PIVOT_BEIGIS_CLIP_X = 42.21
+-- PIVOT_BEIGIS_CLIP_Y = 79.4
+
+UseGiantsShoes = false
 
 function Round(num, numDecimalPlaces)
     local mult = 10 ^ (numDecimalPlaces or 0)
@@ -102,7 +108,8 @@ function CurrentClippingDelta()
 end
 
 function CalculateBrianClippingDelta(cx, cy)
-    local radius = CalculateMovementRadius()
+    local multiple = Ternary(UseGiantsShoes, 2, 1)
+    local radius = CalculateMovementRadius() * multiple
     local distance = BrianDistanceTo(cx, cy)
 
     return Round(distance - radius, 2)
@@ -129,6 +136,10 @@ function ProcessKeyboardInput()
         DecreaseAgility()
     end
 
+    if keys["G"] == true and PreviousKeys["G"] ~= true then
+        UseGiantsShoes = not UseGiantsShoes
+    end
+
     PreviousKeys = input.get()
 end
 
@@ -147,16 +158,24 @@ function PrintAgilityPrompt(first_index)
     GuiText(first_index + 0, "Key UP:   AGI +")
     GuiText(first_index + 1, "Key DOWN: AGI -")
 
-    GuiText(first_index + 3, "Current Agility: " .. current_agility)
+    GuiText(first_index + 3, "Key G: Calculate " .. Ternary(UseGiantsShoes, "Without", "With") .. " Giant's Shoes")
+
+    GuiTextWithColor(first_index + 5, "Giant's Shoes Calculation: " .. Ternary(UseGiantsShoes, "Enabled", "Disabled"), Ternary(UseGiantsShoes, "cyan", "white"))
+    GuiText(first_index + 6, "Current Agility: " .. current_agility)
 end
 
 function PrintPositioning(first_index)
 
     local x, z = GetBrianPosition()
+    local map, subMap = GetMapIDs()
 
     GuiText(first_index + 0, "Current Position: ")
-    GuiText(first_index + 1, "Brian X: " .. Round(x, 4))
-    GuiText(first_index + 2, "Brian Z: " .. Round(z, 4))
+    GuiText(first_index + 1, "  X: " .. Round(x, 2))
+    GuiText(first_index + 2, "  Z: " .. Round(z, 2))
+    
+    GuiText(first_index + 4, "Current Zone: ")
+    GuiText(first_index + 5, "  Map: " .. map)
+    GuiText(first_index + 6, "  Sub: " .. subMap)
 end
 
 function ClippingDeltaColor(delta)
@@ -197,6 +216,8 @@ function ClippingDeltaRampColor(delta)
     return message, color
 end
 
+LastMapID = 0
+
 function PrintClippingInfo(index)
 
     local mapID, subMapID = GetMapIDs()
@@ -208,7 +229,20 @@ function PrintClippingInfo(index)
     
     elseif mapID == MAP_ID_BOIL_HOLE then
         PrintBoilHoleInfo(index)
+    
+    -- elseif mapID == MAP_ID_BRANNOCH_CASTLE then
+    --     PrintBeigisInfo(index)
     end
+
+    if mapID ~= LastMapID then
+        if mapID == MAP_ID_BOIL_HOLE then
+            UseGiantsShoes = true
+        else
+            UseGiantsShoes = false
+        end
+    end
+
+    LastMapID = mapID
 end
 
 function SignedNumberStr(number)
@@ -239,11 +273,19 @@ end
 
 function PrintBoilHoleInfo(index)
 
-    local pivotDistance = CalculateBrianClippingDeltaWithGiantsShoes(PIVOT_BOIL_HOLE_X, PIVOT_BOIL_HOLE_Y)
+    local pivotDistance = CalculateBrianClippingDelta(PIVOT_BOIL_HOLE_X, PIVOT_BOIL_HOLE_Y)
     local message, color = ClippingDeltaColor(pivotDistance)
 
     GuiTextWithColor(index + 0, pivotDistance .. ", " .. message, color)
 end
+
+-- function PrintBeigisInfo(index)
+
+--     local pivotDistance = CalculateBrianClippingDelta(PIVOT_BEIGIS_CLIP_X, PIVOT_BEIGIS_CLIP_Y)
+--     local message, color = ClippingDeltaColor(pivotDistance)
+
+--     GuiTextWithColor(index + 0, pivotDistance .. ", " .. message, color)
+-- end
 
 function SetOtherStats(hp, mp, defense)
     
@@ -259,8 +301,8 @@ while true do
     ProcessKeyboardInput()
 
     PrintAgilityPrompt(0)
-    PrintClippingInfo(5)
-    PrintPositioning(10)
+    PrintClippingInfo(8)
+    PrintPositioning(13)
 
     SetOtherStats(300, 48, 500)
 
