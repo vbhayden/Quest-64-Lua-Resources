@@ -1,144 +1,119 @@
--- Quest 64 Brian Mover Tool
---
--- This is a Lua script for the Bizhawk emulator
--- to move Brian around in-game.  It can also move enemies. 
---
--- The movement will be relative to the target's rotation.
---
--- To use this script, open a Quest 64 rom with a modern
--- version of the Bizhawk / Emuhawk emulator, then load this
--- file using the Lua console.
---
---
---
--- CONTROLS
---
--- The tool will listen for keyboard inputs and move things
--- in response.  These keybinds can be edited, but you may
--- want to refer to the bizhawk guides for how it wants you
--- to name specific keys etc.
---
-local KB_COPY = "C"
-local KB_PASTE = "V"
-local KB_MOVE_UP = "Up"
-local KB_MOVE_DOWN = "Down"
-local KB_MOVE_LEFT = "Left"
-local KB_MOVE_RIGHT = "Right"
-local KB_MOVEMENT_INCREASE = "PageUp"
-local KB_MOVEMENT_DECREASE = "PageDown"
-local KB_TOGGLE_TARGET = "Space"
-local KB_CHANGE_ENENY = "Tab"
-local KB_RESET_ROTATION = "Delete"
 
--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
---                                                             --
---                                                             --
---                                                             --
---                                                             --
--- Not recommended to edit anything from here onwards etc.     --
---                                                             --
---                                                             --
---                                                             --
---                                                             --
---                                                             --
--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
--- Memory Values
-local MEM_BRIAN_POSITION_X = 0x7BACC
-local MEM_BRIAN_POSITION_Z = 0x7BAD4
-local MEM_BRIAN_ROTATION_Y = 0x7BADC
+MEM_BRIAN_POSITION_X = 0x7BACC
+MEM_BRIAN_POSITION_Z = 0x7BAD4
+MEM_BRIAN_ROTATION_Y = 0x7BADC
 
-local MEM_ENEMY_POSITION_X = 0x7C9BC
-local MEM_ENEMY_POSITION_Z = 0x7C9C4
-local MEM_ENEMY_ROTATION_Y = 0x7C9CC
+MEM_ENEMY_POSITION_X = 0x7C9BC
+MEM_ENEMY_POSITION_Z = 0x7C9C4
+MEM_ENEMY_ROTATION_Y = 0x7C9CC
 
-local MEM_BATTLE_LAST_X = 0x86B18
-local MEM_BATTLE_LAST_Z = 0x86B20
-local MEM_BATTLE_CENTER_X = 0x880B8
-local MEM_BATTLE_CENTER_Z = 0x880D8
+MEM_BATTLE_LAST_X = 0x86B18
+MEM_BATTLE_LAST_Z = 0x86B20
 
-local GUI_PADDING_RIGHT = 240 + 60
+MEM_BATTLE_CENTER_X = 0x880B8
+MEM_BATTLE_CENTER_Z = 0x880D8
 
-local MovementMagnitude = 1
-local MoveEnemy = false
-local MoveEnemyIndex = 0
+MEM_ENEMY_COUNT = 0x07C993
 
-local PreviousKeys = {}
-local PreviousX = nil
-local PreviousZ = nil
+GUI_CHAR_WIDTH = 10
+GUI_PADDING_RIGHT = 240 + 60
 
-local BattleCenters = {}
-local BattleDistanceMin = 9999
-local BattleDistanceMax = 0
-local EncounterWasActive = false
+MovementMagnitude = 1
 
-local function Round(num, numDecimalPlaces)
+MoveEnemy = false
+MoveEnemyIndex = 0
+
+local analog_x = 0
+local analog_y = 0
+local use_analog = false
+local analog_increment = 1
+local analog_decrement = -5
+local analog_min = 0
+local analog_max = 127
+
+local function Clamp(value, min, max)
+    if value > max then
+        return max
+
+    elseif value < min then
+        return min
+    end
+
+    return value
+end
+
+function Round(num, numDecimalPlaces)
     local mult = 10 ^ (numDecimalPlaces or 0)
     return math.floor(num * mult + 0.5) / mult
 end
 
-local function Ternary ( cond , T , F )
+function Ternary ( cond , T , F )
     if cond then return T else return F end
 end
 
-local function GetMapIDs()
+function GetEnemyCount()
+    return memory.readbyte(MEM_ENEMY_COUNT, "RDRAM")
+end
+
+function GetMapIDs()
     local mapID = memory.readbyte(0x8536B, "RDRAM")
     local subMapID = memory.readbyte(0x8536F, "RDRAM")
 
     return mapID, subMapID
 end
 
-local function GetLastCombatPosition()
+function GetLastCombatPosition()
     local bx = memory.readfloat(MEM_BATTLE_LAST_X, true, "RDRAM")
     local bz = memory.readfloat(MEM_BATTLE_LAST_Z, true, "RDRAM")
 
     return bx, bz
 end
 
-local function GetBrianLocation()
+function GetBrianLocation()
     local brianX = memory.readfloat(MEM_BRIAN_POSITION_X, true, "RDRAM")
     local brianZ = memory.readfloat(MEM_BRIAN_POSITION_Z, true, "RDRAM")
     
     return brianX, brianZ
 end
 
-local function SetBrianLocation(x, z)
+function SetBrianLocation(x, z)
     
     memory.writefloat(MEM_BRIAN_POSITION_X, x, true, "RDRAM")
     memory.writefloat(MEM_BRIAN_POSITION_Z, z, true, "RDRAM")
 end
 
-local function GetBrianDirection()
+function GetBrianDirection()
     local angleRadians = memory.readfloat(MEM_BRIAN_ROTATION_Y, true, "RDRAM")
     return angleRadians
 end
 
-local function SetBrianDirection(angle)
+function SetBrianDirection(angle)
     memory.writefloat(MEM_BRIAN_ROTATION_Y, angle, true, "RDRAM")
 end
 
-local function GetEnemyLocation()
+function GetEnemyLocation()
     local brianX = memory.readfloat(MEM_ENEMY_POSITION_X + MoveEnemyIndex * 296, true, "RDRAM")
     local brianZ = memory.readfloat(MEM_ENEMY_POSITION_Z + MoveEnemyIndex * 296, true, "RDRAM")
     
     return brianX, brianZ
 end
 
-local function GetEnemyDirection()
+function GetEnemyDirection()
     local angleRadians = memory.readfloat(MEM_ENEMY_ROTATION_Y + MoveEnemyIndex * 296, true, "RDRAM")
     return angleRadians
 end
 
-local function SetEnemyLocation(x, z)
+function SetEnemyLocation(x, z)
     
     memory.writefloat(MEM_ENEMY_POSITION_X + MoveEnemyIndex * 296, x, true, "RDRAM")
     memory.writefloat(MEM_ENEMY_POSITION_Z + MoveEnemyIndex * 296, z, true, "RDRAM")
 end
 
-local function SetEnemyDirection(angle)
+function SetEnemyDirection(angle)
     memory.writefloat(MEM_ENEMY_ROTATION_Y + MoveEnemyIndex * 296, angle, true, "RDRAM")
 end
 
-local function TransformDirectionForBrian(x, y, z)
+function TransformDirectionForBrian(x, y, z)
     -- Direction Notes:
     --
     -- -X = WEST
@@ -169,7 +144,7 @@ local function TransformDirectionForBrian(x, y, z)
     return xp, y, zp
 end
 
-local function TransformDirectionForEnemy(x, y, z)
+function TransformDirectionForEnemy(x, y, z)
     local theta = GetEnemyDirection()
 
     local xp = x * math.cos(-theta) - z * math.sin(-theta)
@@ -178,98 +153,158 @@ local function TransformDirectionForEnemy(x, y, z)
     return xp, y, zp
 end
 
-local function MoveBrianRelative(x, y, z)
+function MoveBrianRelative(x, y, z)
     local dx, dy, dz = TransformDirectionForBrian(x, y, z)
     local brianX, brianZ = GetBrianLocation()
 
     SetBrianLocation(brianX + dx * MovementMagnitude, brianZ + dz * MovementMagnitude)
 end
 
-local function MoveEnemyRelative(x, y, z)
+function MoveEnemyRelative(x, y, z)
     local dx, dy, dz = TransformDirectionForEnemy(x, y, z)
     local brianX, brianZ = GetEnemyLocation()
 
     SetEnemyLocation(brianX + dx * MovementMagnitude, brianZ + dz * MovementMagnitude)
 end
 
-local saved_x = 0
-local saved_y = 0
-local saved_z = 0
-local saved_rotation = 0
+local previous_keys = {}
 
-local function ProcessKeyboardInput()
+local breadcrumbs = {}
+local readingCrumbs = false
+
+local function WriteCrumbCSV(path)
+    local file = io.open(path, "w+")
+    if file == nil then 
+        return console.log("Could not open file at path: " .. path)
+    end
+
+    for _, coord_line in pairs(breadcrumbs) do
+        file:write(coord_line .. "\n")
+    end
+
+    file:close()
+end
+
+local function ReadCrumbs()
+    local bx, bz = GetBrianLocation()
+
+    breadcrumbs[#breadcrumbs+1] = string.format("%f,%f", bx, bz)
+end
+
+local function ToggleAnalog()
+    use_analog = not use_analog
+
+    if not use_analog then
+        joypad.setanalog({ ['X Axis'] = '', ['Y Axis'] = '', }, 1)
+    end
+end
+
+local function UpdateAnalog(dx, dy)
+    analog_x = analog_x + dx
+    analog_x = Clamp(analog_x, analog_min, analog_max)
+    
+    analog_y = analog_y + dy
+    analog_y = Clamp(analog_y, analog_min, analog_max)
+end
+
+local function ClearAnalog()
+    analog_x = 0
+    analog_y = 0
+    
+    joypad.setanalog({ ['X Axis'] = analog_x, ['Y Axis'] = analog_y, }, 1)
+end
+
+
+function ProcessKeyboardInput()
 
     local keys = input.get()
 
-    if keys[KB_TOGGLE_TARGET] == true and PreviousKeys[KB_TOGGLE_TARGET] ~= true then
+    if keys["Space"] == true and previous_keys["Space"] ~= true then
         MoveEnemy = not MoveEnemy
     end
 
     local movementFunc = Ternary(MoveEnemy, MoveEnemyRelative, MoveBrianRelative)
     local rotationFunc = Ternary(MoveEnemy, SetEnemyDirection, SetBrianDirection)
 
-    if keys[KB_MOVE_UP] == true and PreviousKeys[KB_MOVE_UP] ~= true then
-        movementFunc(0, 0, 1)
+    if keys["Backspace"] == true and previous_keys["Backspace"] ~= true then
+        ToggleAnalog()
     end
 
-    if keys[KB_MOVE_DOWN] == true and PreviousKeys[KB_MOVE_DOWN] ~= true then
-        movementFunc(0, 0, -1)
-    end
-
-    if keys[KB_MOVE_LEFT] == true and PreviousKeys[KB_MOVE_LEFT] ~= true then
-        movementFunc(1, 0, 0)
-    end
-
-    if keys[KB_MOVE_RIGHT] == true and PreviousKeys[KB_MOVE_RIGHT] ~= true then
-        movementFunc(-1, 0, 0)
-    end
-
-    if keys[KB_MOVEMENT_INCREASE] == true and PreviousKeys[KB_MOVEMENT_INCREASE] ~= true then
-        MovementMagnitude = MovementMagnitude * 2
-    end
-
-    if keys[KB_MOVEMENT_DECREASE] == true and PreviousKeys[KB_MOVEMENT_DECREASE] ~= true then
-        MovementMagnitude = MovementMagnitude / 2
-        if MovementMagnitude < 1 then
-            MovementMagnitude = 1
+    if keys["Up"] == true and previous_keys["Up"] ~= true then
+        if use_analog then
+            UpdateAnalog(0, analog_increment)
+        else
+            movementFunc(0, 0, 1)
         end
     end
 
-    if keys[KB_COPY] == true and PreviousKeys[KB_COPY] ~= true then
-        saved_x, saved_z = GetBrianLocation()
-        saved_rotation = GetBrianDirection()
+    if keys["Down"] == true and previous_keys["Down"] ~= true then
+        if use_analog then
+            UpdateAnalog(0, analog_decrement)
+        else
+            movementFunc(0, 0, -1)
+        end
     end
 
-    if keys[KB_PASTE] == true and PreviousKeys[KB_PASTE] ~= true then
-        SetBrianLocation(saved_x, saved_z)
-        SetBrianDirection(saved_rotation)
+    if keys["Delete"] == true and previous_keys["Delete"] ~= true then
+        ClearAnalog()
     end
 
-    if keys[KB_RESET_ROTATION] == true and PreviousKeys[KB_RESET_ROTATION] ~= true then
-        rotationFunc(0)
+    if use_analog then
+        joypad.setanalog({ ['X Axis'] = analog_x, ['Y Axis'] = analog_y, }, 1)
     end
 
-    if keys[KB_CHANGE_ENENY] == true and PreviousKeys[KB_CHANGE_ENENY] ~= true then
+    if not use_analog then
+        if keys["Left"] == true and previous_keys["Left"] ~= true then
+            movementFunc(1, 0, 0)
+        end
+    
+        if keys["Right"] == true and previous_keys["Right"] ~= true then
+            movementFunc(-1, 0, 0)
+        end
+    end
+
+    if keys["PageUp"] == true and previous_keys["PageUp"] ~= true then
+        MovementMagnitude = MovementMagnitude * 2
+    end
+
+    if keys["PageDown"] == true and previous_keys["PageDown"] ~= true then
+        MovementMagnitude = MovementMagnitude / 2
+    end
+
+    if keys["Delete"] == true and previous_keys["Delete"] ~= true then
+        rotationFunc(3.14159678)
+    end
+
+    if keys["Tab"] == true and previous_keys["Tab"] ~= true then
         MoveEnemyIndex = MoveEnemyIndex + 1
         if MoveEnemyIndex >= 6 then
             MoveEnemyIndex = 0
         end
     end
+    
+    if keys["Enter"] == true and previous_keys["Enter"] ~= true then
+        if readingCrumbs then
+            WriteCrumbCSV("crumbs.csv")
+        end
 
-    PreviousKeys = input.get()
+        readingCrumbs = not readingCrumbs
+    end
+
+    previous_keys = input.get()
 end
 
-local function GuiTextWithColor(row_index, text, color)
+function GuiTextWithColor(row_index, text, color)
     
     local borderWidth = client.borderwidth();
     gui.text(borderWidth + 40, 240 + row_index * 15, text, color)
 end
 
-local function GuiText(row_index, text)
+function GuiText(row_index, text)
     GuiTextWithColor(row_index, text, "white")
 end
 
-local function GuiTextRight(row_index, text)
+function GuiTextRight(row_index, text)
     
     local borderWidth = client.borderwidth();
     local screenWidth = client.screenwidth();
@@ -278,7 +313,10 @@ local function GuiTextRight(row_index, text)
     gui.text(resolvedOffset, 20 + row_index * 15, text)
 end
 
-local function GetMovementDelta(x, z)
+PreviousX = nil
+PreviousZ = nil
+
+function GetMovementDelta(x, z)
 
     local dx = 0
     local dz = 0
@@ -297,22 +335,36 @@ local function GetMovementDelta(x, z)
     return dx, dz
 end
 
-local function GetEnemyCount()
+function PrintCombatValues(index)
+
+    local start = 0x88188 - 20 * 16
+
+    for k = 0, 40 do
+        local iter_address = start + k * 16
+        local combat_value = memory.readfloat(iter_address, true, "RDRAM")
+
+        GuiTextRight(k + index, "Combat " .. string.format("%x", iter_address) .. ": " .. combat_value)
+    end
+end
+
+function GetEnemyCount()
     return memory.readbyte(0x07C993, "RDRAM")
 end
 
-local function IsEncounterActive()
+function IsEncounterActive()
     return GetEnemyCount() > 0
 end
 
-local function GetCombatCenter()
+function GetCombatCenter()
     local cx = memory.readfloat(MEM_BATTLE_CENTER_X, true, "RDRAM")
     local cz = memory.readfloat(MEM_BATTLE_CENTER_Z, true, "RDRAM")
 
     return cx, cz
 end
 
-local function AddBattleCenter(x, z)
+BattleCenters = {}
+
+function AddBattleCenter(x, z)
     local new_coord = { x = x, z = z }
     for k, coord in pairs(BattleCenters) do
         if coord.x == new_coord.x and coord.z == new_coord.z then
@@ -322,6 +374,14 @@ local function AddBattleCenter(x, z)
 
     BattleCenters[#BattleCenters+1] = new_coord
 end
+
+function CountUniqueBattleCenters()
+    return #BattleCenters
+end
+
+BattleDistanceMin = 9999
+BattleDistanceMax = 0
+EncounterWasActive = false
 
 while true do
 
@@ -337,12 +397,17 @@ while true do
     local map, submap = GetMapIDs()
     local x, z = GetBrianLocation()
     local dx, dz = GetMovementDelta(x, z)
+    local bx, bz = GetLastCombatPosition()
     local angle = GetBrianDirection()
     local cx, cz = GetCombatCenter()
 
     local cdx = cx - x
     local cdz = cz - z
     local center_dist = math.sqrt(cdx * cdx + cdz * cdz)
+    
+    local ldx = bx - x
+    local ldz = bz - z
+    local combat_dist = math.sqrt(ldx * ldx + ldz * ldz)
 
     local encounter_active = IsEncounterActive()
     local just_got_encounter = encounter_active and not EncounterWasActive
@@ -360,37 +425,58 @@ while true do
 
     EncounterWasActive = encounter_active
 
+    local bdx = x - bx
+    local bdz = z - bz
     local speed = math.sqrt(dx * dx + dz * dz)
 
-    GuiText(0, "Brian Mover:")
-    GuiText(1, "  Target:   " .. Ternary(MoveEnemy, "Enemy #" .. MoveEnemyIndex, "Brian"))
-    GuiText(2, "  Movement: " .. MovementMagnitude)
-    GuiText(3, "  Brian X: " .. Round(x, 1))
-    GuiText(4, "  Brian Z: " .. Round(z, 1))
-    GuiText(5, "  Brian Angle: " .. Round(angle, 1))
-    GuiText(6,  string.format("  Map: %d, Submap: %d", map, submap))
+    if use_analog then
+        GuiTextWithColor(4, "Mode:     Precison", "cyan")
+        GuiText(5, "Target:   Brian (Walking)")
+        GuiText(6, "Analog:  " ..analog_y)
+        GuiText(7, "Brian X: " .. Round(x, 1))
+        GuiText(8, "Brian Z: " .. Round(z, 1))
+        GuiText(9, "Brian Angle: " .. Round(angle, 1))
+        GuiText(10, "Brian Speed: " .. Round(speed, 2))
+    else
+        GuiTextWithColor(4, "Mode:     Default", "gray")
+        GuiText(5, "Target:   " .. Ternary(MoveEnemy, "Enemy #" .. MoveEnemyIndex, "Brian"))
+        GuiText(6, "Movement: " .. MovementMagnitude)
+        GuiText(7, "Brian X: " .. Round(x, 1))
+        GuiText(8, "Brian Z: " .. Round(z, 1))
+        GuiText(9, "Brian Angle: " .. Round(angle, 1))
+        GuiText(10, "Brian Speed: " .. Round(speed, 2))
 
-    GuiText(8, "Controls:")
-    GuiText(9, "  Move ^: " .. KB_MOVE_UP)
-    GuiText(10, "  Move v: " .. KB_MOVE_DOWN)
-    GuiText(11, "  Move <: " .. KB_MOVE_LEFT)
-    GuiText(12, "  Move >: " .. KB_MOVE_RIGHT)
-    GuiText(13, "  Move More: " .. KB_MOVEMENT_INCREASE)
-    GuiText(14, "  Move Less: " .. KB_MOVEMENT_DECREASE)
-    GuiText(15, "  Reset Angle: " .. KB_RESET_ROTATION)
-    GuiText(16, "  Swap Target: " .. KB_TOGGLE_TARGET)
-    GuiText(17, "  Next Enemy:  " .. KB_CHANGE_ENENY)
+        analog_y = 0
+    end
 
-    -- local bx, bz = GetLastCombatPosition()
-    -- local bdx = x - bx
-    -- local bdz = z - bz
-    -- GuiTextRight(8, "Battle Dist: " .. Round(center_dist, 2))
+    GuiText(12, "Agi Dist:  " .. Round(combat_dist, 2))
+
+    GuiText(14, "Map ID:  " .. map)
+    GuiText(15, "Sub Map: " .. submap)
+
+    -- GuiTextRight(5, "Unique Centers: " .. CountUniqueBattleCenters())
+    -- GuiTextRight(6, "Battle Dist: " .. Round(center_dist, 2))
+    -- GuiTextRight(7, "Battle Dist (Min): " .. Round(BattleDistanceMin, 2))
+    -- GuiTextRight(8, "Battle Dist (Max): " .. Round(BattleDistanceMax, 2))
+        
+
     -- GuiTextRight(9, "Battle Center X: " .. Round(cx, 5))
     -- GuiTextRight(10, "Battle Center Z: " .. Round(cz, 5))
     -- GuiTextRight(11, "Battle Delta X: " .. Round(bdx, 2))
     -- GuiTextRight(12, "Battle Delta Z: " .. Round(bdz, 2))
 
+    -- PrintCombatValues(5)
+
+    if readingCrumbs then
+        ReadCrumbs()
+    end
+    
+    GuiTextWithColor(15, "Reading Movement: " .. Ternary(readingCrumbs, "RECORDING", "No"), Ternary(readingCrumbs, "red", "grey"))
+
     ProcessKeyboardInput()
 
     emu.frameadvance()
 end
+
+-- 42.7, 79.4
+--

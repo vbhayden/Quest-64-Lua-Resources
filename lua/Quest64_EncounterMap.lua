@@ -20,9 +20,9 @@
 --
 local MAP_GRID_WIDTH = 18
 local MAP_GRID_HEIGHT = 11
-local MAP_GRID_UNIT_SPACING = 8
-local MAP_ANCHOR_X = 10
-local MAP_ANCHOR_Y = 16
+local MAP_GRID_UNIT_SPACING = 5
+local MAP_ANCHOR_X = 40
+local MAP_ANCHOR_Y = 30
 
 -- Color Config
 --
@@ -49,6 +49,7 @@ local MAP_CHARACTER_NO_ENCOUNTERS = "."
 local ENCOUNTER_FEEDBACK_ENABLED = true
 local ENCOUNTER_FEEDBACK_ANCHOR_Y = -2
 local ENCOUNTER_FEEDBACK_DURATION_MS = 1000
+local CACHED_BLOCK_WIDTH = 200
 
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
 --                                                             --
@@ -63,10 +64,6 @@ local ENCOUNTER_FEEDBACK_DURATION_MS = 1000
 --                                                             --
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
 -- Memory Values
-local MEM_MAP_ID = 0x8536B
-local MEM_SUBMAP_ID = 0x8536F
-local MEM_PTR_REGION_DATA = 0x08C560
-local MEM_PTR_CIRCLE_DATA = 0x08C564
 local MEM_ENCOUNTER_STEP_DISTANCE = 0x8C574
 local MEM_ENCOUNTER_ACCUMULATION = 0x8C578
 local MEM_CAMERA_ROTATION_Y = 0x86DE8
@@ -83,12 +80,23 @@ local GUI_PADDING_RIGHT = 240 + 80
 local current_map = -1
 local current_submap = -1
 local current_encounter_centers = {}
+local cached_regional_blocks = {}
 
 local encounter_checked_at = 0
 local last_step_distance = 0
 local last_encounter_check_result = nil
 
+
 local cached_regions = {}
+
+local function Round(num, numDecimalPlaces)
+    local mult = 10 ^ (numDecimalPlaces or 0)
+    return math.floor(num * mult + 0.5) / mult
+end
+
+local function GetBlockIndices(sample_x, sample_z)
+    return Round(sample_x / CACHED_BLOCK_WIDTH, 0), Round(sample_z / CACHED_BLOCK_WIDTH, 0)
+end
 
 local function TransformDirectionForAngle(x, y, z, theta)
     
@@ -122,11 +130,6 @@ local function TransformDirectionForAngle(x, y, z, theta)
         y = y,
         z = zp
     }
-end
-
-local function Round(num, numDecimalPlaces)
-    local mult = 10 ^ (numDecimalPlaces or 0)
-    return math.floor(num * mult + 0.5) / mult
 end
 
 local function GetCameraAngle()
@@ -167,8 +170,8 @@ end
 
 local function GetEncounterPointers()
 
-    local ptr_region_data = GetPointerFromAddress(MEM_PTR_REGION_DATA)
-    local ptr_circle_data = GetPointerFromAddress(MEM_PTR_CIRCLE_DATA)
+    local ptr_region_data = GetPointerFromAddress(0x08C560)
+    local ptr_circle_data = GetPointerFromAddress(0x08C564)
 
     return {
         ptr_region_start = GetPointerFromAddress(ptr_region_data),
@@ -317,9 +320,16 @@ local function GuiCharRightWithColorExplicit(row_index, char_index, char, color,
     gui.text(resolvedOffset + char_index * GUI_CHAR_WIDTH, 20 + row_index * 15, char, color)
 end
 
+local function GuiRowRightWithColorExplicit(row_index, char_index, text, color, border_width, screen_width)
+    
+    local resolvedOffset = screen_width - border_width - GUI_PADDING_RIGHT
+
+    gui.text(resolvedOffset + char_index * GUI_CHAR_WIDTH, 20 + row_index * 15, text, color)
+end
+
 local function GetMapIDs()
-    local mapID = memory.readbyte(MEM_MAP_ID, "RDRAM")
-    local subMapID = memory.readbyte(MEM_SUBMAP_ID, "RDRAM")
+    local mapID = memory.readbyte(0x8536B, "RDRAM")
+    local subMapID = memory.readbyte(0x8536F, "RDRAM")
 
     return mapID, subMapID
 end
@@ -339,6 +349,79 @@ local function GetEncounterCenters()
     end
 end
 
+local function BuildBlocksFromCenters(centers)
+
+    local regional_blocks = {}
+
+    for _, coord in pairs(centers) do
+        local block_i, block_j = GetBlockIndices(coord.x, coord.z)
+        
+        if regional_blocks[block_i] == nil then
+            regional_blocks[block_i] = {}
+        end
+
+        if regional_blocks[block_i][block_j] == nil then
+            regional_blocks[block_i][block_j] = {}
+        end
+
+        -- console.log("Adding Coord to block " .. block_i .. ", " .. block_j)
+
+        block_centers = regional_blocks[block_i][block_j]
+        block_centers[#block_centers + 1] = coord
+
+        regional_blocks[block_i][block_j] = block_centers
+    end
+
+    -- console.log(regional_blocks[90][110][1])
+
+    return regional_blocks
+end 
+
+local function MergeTables(t1, t2)
+    for i=1,#t2 do
+        t1[#t1+1] = t2[i]
+    end
+    return t1
+end
+
+local cached_grid_x = -9999
+local cached_grid_z = -9999
+local cached_neighbor_return = {}
+
+local function GetNeighboringCenters(sample_x, sample_z, regional_blocks)
+    local grid_x, grid_z = GetBlockIndices(sample_x, sample_z)
+
+
+    if grid_x == cached_grid_x and grid_z == cached_grid_z then
+        return cached_neighbor_return
+    end
+
+    console.log("Rebuilding Neighbors for: " .. grid_x .. ", " .. grid_z)
+    -- console.log("Cached Grid: " .. cached_grid_x .. ", " .. cached_grid_z)
+    -- console.log("Actual Grid: " .. grid_x .. ", " .. grid_z)
+    local nearby = {}
+
+    for i=-1, 1 do
+        for j=-1,1 do
+            if regional_blocks[grid_x+i] ~= nil then
+                if regional_blocks[grid_x+i][grid_z+j] ~= nil then
+                    local neighboring_centers = regional_blocks[grid_x+i][grid_z+j]
+                    nearby = MergeTables(nearby, neighboring_centers)
+                end
+            end
+        end
+    end
+
+    -- console.log(regional_blocks[90][110][1])
+
+    cached_grid_x = grid_x
+    cached_grid_z = grid_z
+
+    cached_neighbor_return = nearby
+
+    return nearby
+end
+
 local check_for_regions = true
 
 local function GetLocalEnounterInfo()
@@ -352,6 +435,7 @@ local function GetLocalEnounterInfo()
     if map ~= current_map or submap ~= current_submap then
 
         current_encounter_centers = GetEncounterCenters()
+        cached_regional_blocks = BuildBlocksFromCenters(current_encounter_centers)
         
         local extra_print = ""
         if current_encounter_centers ~= nil then
@@ -359,7 +443,7 @@ local function GetLocalEnounterInfo()
         end
 
         console.log("Loading data for Map: " .. map .. ", Sub-Map: " .. submap .. extra_print)
-        
+
         check_for_regions = true
     end
 
@@ -375,29 +459,32 @@ local function GetLocalEnounterInfo()
     return current_encounter_centers
 end
 
-local function GetTrimmedCenters(centers, brian, width, height)
+local function GetTrimmedCenters(regional_blocks, brian, width, height)
 
-    local trimmed = {}
 
-    local visible_width = width + 80
-    local visible_height = height + 80
+    local neighboring = GetNeighboringCenters(brian.x, brian.z, regional_blocks)
 
-    local visible_width_sqr = visible_width * visible_width
-    local visible_height_sqr = visible_height * visible_height
+    -- local trimmed = {}
 
-    for _, coord in pairs(centers) do
-        local dx = brian.x - coord.x
-        local dz = brian.z - coord.z
+    -- local visible_width = width + 80
+    -- local visible_height = height + 80
 
-        local within_width = dx * dx < visible_width_sqr
-        local within_height = dz * dz < visible_height_sqr
+    -- local visible_width_sqr = visible_width * visible_width
+    -- local visible_height_sqr = visible_height * visible_height
 
-        if within_width and within_height then
-            trimmed[#trimmed+1] = coord
-        end
-    end
+    -- for _, coord in pairs(neighboring) do
+    --     local dx = brian.x - coord.x
+    --     local dz = brian.z - coord.z
 
-    return trimmed
+    --     local within_width = dx * dx < visible_width_sqr
+    --     local within_height = dz * dz < visible_height_sqr
+
+    --     if within_width and within_height then
+    --         trimmed[#trimmed+1] = coord
+    --     end
+    -- end
+
+    return neighboring
 end
 
 EMPTY_RESULT = {
@@ -408,7 +495,7 @@ EMPTY_RESULT = {
     two_turns = 0,
     three_turns = 0,
     region_index = -1,
-    colliding_total = 0
+    overlaps = 0
 }
 
 local function GetCollidingEncounters(centers, sample_x, sample_z, movement_radius)
@@ -432,40 +519,57 @@ local function GetCollidingEncounters(centers, sample_x, sample_z, movement_radi
     local one_turns = 0
     local two_turns = 0
     local three_turns = 0
-    local colliding = {}
+    -- local colliding = {}
+
+    local min_distance_sqr = 50 * 50
+    local max_distance_sqr = 90 * 90
+    local one_turn_distance_sqr = (100 - movement_radius) * (100 - movement_radius)
+    local two_turn_distance_sqr = (100 - 2 * movement_radius) * (100 - 2 * movement_radius)
+
+    local color = "white"
 
     for _, coord in pairs(centers) do
 
         local dx = sample_x - coord.x
         local dz = sample_z - coord.z
-        local distance = math.sqrt(dx * dx + dz * dz)
+        local distance_sqr = dx * dx + dz * dz
 
-        if distance < 50 then
+        if distance_sqr < min_distance_sqr then
             too_close = too_close + 1
 
-        elseif distance < 90 and distance >= 50 then
+        elseif distance_sqr < max_distance_sqr and distance_sqr >= min_distance_sqr then
 
-            if (distance + movement_radius) > 100 then
+            if distance_sqr > one_turn_distance_sqr then
                 one_turns = one_turns + 1
-            elseif (distance + 2 * movement_radius) > 100 then
+            elseif distance_sqr > two_turn_distance_sqr then
                 two_turns = two_turns + 1
             else
                 three_turns = three_turns + 1
             end
             
-            colliding[#colliding + 1] = coord
+            -- colliding[#colliding + 1] = coord
         end
     end
 
+    if three_turns > 0 then
+        color = "red"
+    elseif two_turns > 0 then
+        color = "orange"
+    elseif one_turns > 0 then
+        color = "yellow"
+    else
+        color = "white"
+    end
+
     return {
-        colliding = colliding,
+        color = color,
         too_close = too_close,
         too_far = too_far,
         one_turns = one_turns,
         two_turns = two_turns,
         three_turns = three_turns,
         region_index = region_index,
-        colliding_total = one_turns + two_turns + three_turns
+        overlaps = one_turns + two_turns + three_turns
     }
 end
 
@@ -503,7 +607,7 @@ local function PrintEncounterGrid(centers, grid_width, grid_height, unit_spacing
     local output = {}
 
     local camera_theta = GetCameraAngle()
-    local trimmed_centers = GetTrimmedCenters(centers, brian, grid_width * unit_spacing, grid_height * unit_spacing)
+    local trimmed_centers = GetTrimmedCenters(cached_regional_blocks, brian, grid_width * unit_spacing, grid_height * unit_spacing)
 
     local camera_right = TransformDirectionForAngle(1, 0, 0, camera_theta)
     local camera_forward = TransformDirectionForAngle(0, 0, 1, camera_theta)
@@ -527,14 +631,7 @@ local function PrintEncounterGrid(centers, grid_width, grid_height, unit_spacing
 
             local result = GetCollidingEncounters(trimmed_centers, sample_x, sample_z, movement_radius)
 
-            row[#row+1] = {
-                overlaps = result.colliding_total,
-                one_turns = result.one_turns,
-                two_turns = result.two_turns,
-                three_turns = result.three_turns,
-                center = offset_x == 0 and offset_z == 0,
-                region_index = result.region_index
-            }
+            row[#row+1] = result
         end
     end
 
@@ -551,20 +648,54 @@ local function PrintEncounterGrid(centers, grid_width, grid_height, unit_spacing
     local border_width = client.borderwidth();
     local screen_width = client.screenwidth();
 
+    -- GuiTextCenterWithColor(20, "Sampling " .. #current_encounter_centers .. ", reduced to " .. #cached_neighbor_return, "Yellow")
+
     starting_row = starting_row + 2
+
+    -- local blank_row = {}
+    -- for k=1, 2 * grid_width + 1 do
+    --     blank_row[#blank_row+1] = " "
+    -- end
+
+    -- local text_for_overlaps = ""
+    -- local text_for_no_regions = ""
+    -- local text_for_no_encounters = ""
 
     for x = 1, #output do
 
         local row = output[x]
 
+        -- local row_for_overlaps = MergeTables({}, blank_row)
+        -- local row_for_no_region = MergeTables({}, blank_row)
+        -- local row_for_no_encounters = MergeTables({}, blank_row)
+
+        local gx = x + starting_row
+
         for z = 1, #row do
+
             local result = row[z]
             local color = GetOverlapColor(result.one_turns, result.two_turns, result.three_turns)
+            local color = result.color
+            -- local color = "white"
 
-            local gx = x + starting_row
             local gy = z - column_offset
 
-            if result.center then
+            -- if x == (#output / 2 + 0.5) and z == (#row / 2 + 0.5) then
+
+            --     if checked_encounter_now then
+            --         last_encounter_check_result = result
+            --     end
+
+            --     GuiCharRightWithColorExplicit(gx, gy, result.overlaps, MAP_COLOR_PLAYER, border_width, screen_width)
+            -- elseif result.overlaps > 0 then
+            --     GuiCharRightWithColorExplicit(gx, gy, result.overlaps, color, border_width, screen_width)
+            -- elseif result.region_index < 0 then
+            --     GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_REGION, MAP_COLOR_NO_REGION, border_width, screen_width)
+            -- else
+            --     GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_ENCOUNTERS, color, border_width, screen_width)
+            -- end
+
+            if x == (#output / 2 + 0.5) and z == (#row / 2 + 0.5) then
 
                 if checked_encounter_now then
                     last_encounter_check_result = result
@@ -578,8 +709,42 @@ local function PrintEncounterGrid(centers, grid_width, grid_height, unit_spacing
             else
                 GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_ENCOUNTERS, MAP_COLOR_NO_ENCOUNTERS, border_width, screen_width)
             end
+            
+            -- if result.center then
+
+            --     if checked_encounter_now then
+            --         last_encounter_check_result = result
+            --     end
+
+            --     GuiCharRightWithColorExplicit(gx, gy, result.overlaps, MAP_COLOR_PLAYER, border_width, screen_width)
+            -- elseif result.overlaps > 0 then
+            --     -- GuiCharRightWithColorExplicit(gx, gy, result.overlaps, color, border_width, screen_width)
+            --     row_for_overlaps[z] = result.overlaps
+
+            -- elseif result.region_index < 0 then
+            --     -- GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_REGION, MAP_COLOR_NO_REGION, border_width, screen_width)
+            --     row_for_no_region[z] = MAP_CHARACTER_NO_REGION
+
+            -- else
+            --     -- GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_ENCOUNTERS, MAP_COLOR_NO_ENCOUNTERS, border_width, screen_width)
+            --     row_for_no_encounters[z] = MAP_CHARACTER_NO_ENCOUNTERS
+            -- end
         end
+
+        -- console.log(grid_width .. ", " .. grid_height)
+        -- console.log(row_for_no_encounters)
+
+        -- text_for_overlaps = text_for_overlaps .. "\n" .. table.concat(row_for_overlaps, "")
+        -- text_for_no_encounters = text_for_no_encounters .. "\n" .. table.concat(row_for_no_encounters, "")
+        -- text_for_no_regions = text_for_no_regions .. "\n" .. table.concat(row_for_no_region, "")
+
     end
+    
+    -- GuiRowRightWithColorExplicit(1 + starting_row, 1 - column_offset, text_for_overlaps, "yellow", border_width, screen_width)
+    -- GuiRowRightWithColorExplicit(1 + starting_row, 1 - column_offset, text_for_no_encounters, MAP_COLOR_NO_ENCOUNTERS, border_width, screen_width)
+    -- GuiRowRightWithColorExplicit(1 + starting_row, 1 - column_offset, text_for_no_regions, MAP_COLOR_NO_REGION, border_width, screen_width)
+
+    -- console.log(#output .. ", " .. #output[1])
 end
 
 local function PrintOverlapFeedback(index)

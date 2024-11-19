@@ -1170,7 +1170,7 @@ for heals=0,12 do
         -- end
         
         if had_success then
-            SaveResultsToFile(best_fight_decisions, string.format("%02d-turn mammon %d-%d.csv", best_fight_duration, heals, exits))
+            SaveResultsToFile(best_fight_decisions, string.format("data/%02d-turn mammon %d-%d.csv", best_fight_duration, heals, exits))
         end
     end
 end

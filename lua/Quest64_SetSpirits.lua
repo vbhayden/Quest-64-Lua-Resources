@@ -40,8 +40,8 @@ while true do
     -- SetSpirits(20, 50, 48, 1)
     -- SetOtherStats(115, 18, 4, 95, 115, 18)
     
-    SetSpirits(49, 49, 49, 49)
-    SetOtherStats(1, 48, 100, 89, 150, 48)
+    -- SetSpirits(49, 49, 49, 49)
+    -- SetOtherStats(1, 48, 100, 89, 150, 48)
     
     -- SetSpirits(1, 25, 23, 1)
     -- SetOtherStats(82, 20, 16, 16, 82, 20)
@@ -57,6 +57,9 @@ while true do
     
     -- SetSpirits(1, 34, 1, 1)
     -- SetOtherStats(1, 15, 40, 40, 82, 20)
+    
+    SetSpirits(1, 1, 7, 1)
+    SetOtherStats(50, 15, 4, 10, 50, 15)
     
     -- SetSpirits(1, 1, 23, 1)
     -- SetOtherStats(1, 15, 6, 6, 50, 15)
