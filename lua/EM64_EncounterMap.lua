@@ -170,8 +170,18 @@ end
 
 local function GetEncounterPointers()
 
-    local ptr_region_data = GetPointerFromAddress(0x08C560)
-    local ptr_circle_data = GetPointerFromAddress(0x08C564)
+    local ptr_region_data = GetPointerFromAddress(0x08BF98)
+    local ptr_circle_data = GetPointerFromAddress(0x08BF9C)
+
+    -- 145EB4	w	s	1	RDRAM	
+    -- 145EB6	w	s	1	RDRAM
+    -- 146138	d	h	1	RDRAM	
+    -- 80146130
+    -- 80145DD4
+    -- 80145D80
+    -- 80145DBC
+
+    -- 08BF98	d	h	1	RDRAM	
 
     return {
         ptr_region_start = GetPointerFromAddress(ptr_region_data),
@@ -763,44 +773,17 @@ local function PrintOverlapFeedback(index)
     end
 end
 
-local function WriteCircleCSV(path, data_table)
+local function WriteToCSV(path, data)
     local file = io.open(path, "w+")
     if file == nil then 
         return console.log("Could not open file at path: " .. path)
     end
 
-    console.clear()
-
-    for k = 1, #data_table do
-        local data = data_table[k]
-        if k == 1 then
-            console.log(data)
-        end
-        local line = data.x .. "," .. data.z
-        file:write(line .. "\n")
+    for _, coord_line in pairs(breadcrumbs) do
+        file:write(coord_line .. "\n")
     end
 
     file:close()
-    
-    console.log("Wrote data to: " .. path)
-end
-
-local function WriteRegionCSV(path, data_table)
-    local file = io.open(path, "w+")
-    if file == nil then 
-        return console.log("Could not open file at path: " .. path)
-    end
-
-    for k = 1, #data_table do
-        local data = data_table[k]
-        console.log(data)
-        local line = data.x .. "," .. data.z .. "," .. data.w .. "," .. data.d
-        file:write(line .. "\n")
-    end
-
-    file:close()
-    
-    console.log("Wrote data to: " .. path)
 end
 
 local function WriteEncounterInfoToCSVs(circles, regions)
@@ -809,8 +792,8 @@ local function WriteEncounterInfoToCSVs(circles, regions)
     local path_circles = "data/" .. map .. "-" .. submap .. "-circles"
     local path_regions = "data/" .. map .. "-" .. submap .. "-regions"
 
-    WriteCircleCSV(path_circles, circles)
-    WriteRegionCSV(path_regions, regions)
+    WriteToCSV(path_circles, circles)
+    WriteToCSV(path_regions, regions)
 end
 
 
@@ -820,7 +803,7 @@ local function ProcessKeyboardInput()
     local keys = input.get()
 
     if keys["Space"] == true and previous_keys["Space"] ~= true then
-        WriteEncounterInfoToCSVs(current_encounter_centers, cached_regions)
+        WriteEncounterInfoToCSVs(current_encounter_centers, cached_regional_blocks)
     end
 
     previous_keys = input.get()
