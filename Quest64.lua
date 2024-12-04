@@ -1338,7 +1338,7 @@ while true do
 
     -- BOSS SAVE STATE PREP FOR US GLITCHLESS
 
-    setupNavigator()
+    -- setupNavigator()
 
     -- setupConnorDD()
     -- setupSolvaring()
@@ -1349,7 +1349,7 @@ while true do
     -- setupFargo()
     -- setupGuilty()
     -- setupBeigis()
-    -- setupMammon()
+    setupMammon()
 
     -- Boil Hole OOB:  75, 55, 
 
