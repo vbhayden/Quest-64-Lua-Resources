@@ -11,6 +11,15 @@ from dataclasses import dataclass
 from multiprocessing import Pool, cpu_count
 
 @dataclass
+class WallDefinition:
+    x: List[float]
+    z: List[float]
+
+@dataclass 
+class RegionWallDefinition:
+    walls: List[WallDefinition]
+    
+@dataclass
 class EncounterAABB:
     x: int
     z: int
@@ -25,7 +34,7 @@ class EncounterAABB:
             return False
         
         return True
-    
+
 @dataclass
 class Circle:
     x: int
@@ -42,6 +51,7 @@ class RegionDefinition:
     name: str
     aabbs: List[EncounterAABB]
     circles: List[Circle]
+    walls: RegionWallDefinition
     
     def get_full_bounds(self) -> Tuple[int, int, int, int]:
         min_x = +999999
@@ -106,7 +116,7 @@ class RegionDefinition:
         plt.figure(figsize=(50, 30))
         plt.imshow(
             distances,
-            extent=[x.min() - 50, x.max() + 50, z.min() - 50, z.max() + 50],
+            extent=[x.min(), x.max(), z.min(), z.max()],
             origin='lower',
             aspect='auto',
             cmap='viridis'
@@ -121,7 +131,7 @@ class RegionDefinition:
         
         for aabb in self.aabbs:
             rect = patches.Rectangle(
-                (aabb.x + density, aabb.z + density),
+                (aabb.x, aabb.z),
                 aabb.width,
                 aabb.depth,
                 linewidth=2,
@@ -129,6 +139,9 @@ class RegionDefinition:
                 facecolor='none'
             )
             ax.add_patch(rect)
+        
+        for wall_segment in self.walls.walls:
+            plt.plot(wall_segment.x, wall_segment.z, linewidth=2, color="black")
         
         # plt.show()
         plt.savefig(f"out/{self.name}.png")
@@ -142,11 +155,12 @@ def get_region_names(data_path: str) -> List[str]:
     
     return list(region_names)
 
-def load_rows_at_path(full_path: str) -> List[List[str]]:
+
+def load_rows_at_path(full_path: str) -> List[List[float]]:
     
     with open(full_path, "r") as fp:
         lines = fp.readlines()
-        rows = [[int(col) for col in line.split(",")] for line in lines if line.strip() != ""]
+        rows = [[float(col) for col in line.split(",")] for line in lines if line.strip() != ""]
         
         return rows
     
@@ -168,30 +182,44 @@ def load_aabbs_at_path(data_path: str, region_name: str) -> List[EncounterAABB]:
         
     return aabbs
 
+def load_walls_at_path(data_path: str, region_name: str) -> RegionWallDefinition:
+    
+    walls = []
+    
+    filenames = [filename for filename in listdir(data_path) if isfile(join(data_path, filename))]
+    crumb_names = [f for f in filenames if ("-crumbs" in f) and (region_name in f)]
+    for crumb_filename in crumb_names:
+        full_path = join(data_path, crumb_filename)
+        crumb_rows = load_rows_at_path(full_path)
+        
+        xs = [row[0] for row in crumb_rows]
+        zs = [row[1] for row in crumb_rows]
+        
+        wall = WallDefinition(x=xs, z=zs)
+        walls.append(wall)
+    
+    return RegionWallDefinition(walls=walls)
+
 def get_data_for_region(data_path: str, region_name: str) -> RegionDefinition:
 
+    walls = load_walls_at_path("data/crumbs", region_name)
     aabbs = load_aabbs_at_path(data_path, region_name)
     circles = load_circles_at_path(data_path, region_name)
-    region = RegionDefinition(name=region_name, aabbs=aabbs, circles=circles)
+    region = RegionDefinition(name=region_name, aabbs=aabbs, circles=circles, walls=walls)
 
     return region
 
-def plot_region_heatmap(region: RegionDefinition):
-    
-    bounds = region.get_full_bounds()
-    
-    
-    
-    pass
 
 def main():
     
-    region_names = get_region_names("data")
+    # region_names = get_region_names("data")
     
-    for name in region_names:
-        region = get_data_for_region("data", name)
-        density_map = region.calculate_density_map(density=2)        
-        
+    # for name in region_names:
+    #     region = get_data_for_region("data", name)
+    #     density_map = region.calculate_density_map(density=2)      
+    
+    region = get_data_for_region("data", "cull-hazard")
+    density_map = region.calculate_density_map(density=5)        
 
 if __name__ == "__main__":
     main()

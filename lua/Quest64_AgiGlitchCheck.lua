@@ -1,19 +1,18 @@
 
-MEM_BRIAN_POSITION_X = 0x7BACC
-MEM_BRIAN_POSITION_Z = 0x7BAD4
-MEM_BRIAN_ROTATION_Y = 0x7BADC
+local MEM_BRIAN_POSITION_X = 0x7BACC
+local MEM_BRIAN_POSITION_Z = 0x7BAD4
+local MEM_BRIAN_ROTATION_Y = 0x7BADC
 
-MEM_ENEMY_POSITION_X = 0x7C9BC
-MEM_ENEMY_POSITION_Z = 0x7C9C4
-MEM_ENEMY_ROTATION_Y = 0x7C9CC
+local MEM_ENEMY_POSITION_X = 0x7C9BC
+local MEM_ENEMY_POSITION_Z = 0x7C9C4
+local MEM_ENEMY_ROTATION_Y = 0x7C9CC
 
-MEM_BATTLE_LAST_X = 0x86B18
-MEM_BATTLE_LAST_Z = 0x86B20
+local MEM_AGILITY_XP = 0x07BAAD
 
-MEM_BATTLE_CENTER_X = 0x880B8
-MEM_BATTLE_CENTER_Z = 0x880D8
+local MEM_COMBAT_AGI_LAST_X = 0x8C5A4
+local MEM_COMBAT_AGI_LAST_Z = 0x8C430
 
-MEM_ENEMY_COUNT = 0x07C993
+local MEM_COMBAT_AGI_DISTANCE = 0x7BCA0
 
 GUI_CHAR_WIDTH = 10
 GUI_PADDING_RIGHT = 240 + 60
@@ -74,6 +73,23 @@ function GetBrianLocation()
     local brianZ = memory.readfloat(MEM_BRIAN_POSITION_Z, true, "RDRAM")
     
     return brianX, brianZ
+end
+
+local function Distance(x1, x2, z1, z2)
+    local dx = x1 - x2
+    local dz = z1 - z2
+
+    return math.sqrt(dx*dx + dz*dz)
+end
+
+local function GetExpectedCombatAgiXP(possible_last_x_addr, possible_last_z_addr)
+
+    local possible_last_x = memory.readfloat(possible_last_x_addr, true, "RDRAM")
+    local possible_last_z = memory.readfloat(possible_last_z_addr, true, "RDRAM")
+
+    local brian_x, brian_z = GetBrianLocation()
+
+    return Distance(brian_x, possible_last_x, brian_z, possible_last_z)
 end
 
 function SetBrianLocation(x, z)
@@ -308,7 +324,7 @@ function ProcessKeyboardInput()
     if keys["Enter"] == true and previous_keys["Enter"] ~= true then
         if readingCrumbs then
             local map, submap = GetMapIDs()
-            local filename = "data/crumbs-" .. map .. "-" .. submap .. "-" .. os.time()
+            local filename = "crumbs-" .. map .. "-" .. submap .. "-" .. os.time()
             WriteCrumbCSV(filename .. ".csv")
         end
 
@@ -409,96 +425,30 @@ EncounterWasActive = false
 
 while true do
 
-    local enemies = GetEnemyCount()
-    if MoveEnemyIndex > enemies - 1 then
-        MoveEnemyIndex = 0
-
-        if MoveEnemyIndex < 0 then
-            MoveEnemyIndex = 0
-        end
-    end
-
-    local map, submap = GetMapIDs()
-    local x, z = GetBrianLocation()
-    local dx, dz = GetMovementDelta(x, z)
-    local bx, bz = GetLastCombatPosition()
-    local angle = GetBrianDirection()
-    local cx, cz = GetCombatCenter()
-
-    local cdx = cx - x
-    local cdz = cz - z
-    local center_dist = math.sqrt(cdx * cdx + cdz * cdz)
+    local brian_x, brian_z = GetBrianLocation()
     
-    local ldx = bx - x
-    local ldz = bz - z
-    local combat_dist = math.sqrt(ldx * ldx + ldz * ldz)
+    local agi_xp = memory.readbyte(MEM_AGILITY_XP, "RDRAM")
+    local current_agi_distance = memory.readfloat(MEM_COMBAT_AGI_DISTANCE, true, "RDRAM")
 
-    local encounter_active = IsEncounterActive()
-    local just_got_encounter = encounter_active and not EncounterWasActive
+    local combat_last_x = memory.readfloat(MEM_COMBAT_AGI_LAST_X, true, "RDRAM")
+    local combat_last_z = memory.readfloat(MEM_COMBAT_AGI_LAST_Z, true, "RDRAM")
 
-    if just_got_encounter then
-        if center_dist > BattleDistanceMax then
-            BattleDistanceMax = center_dist
-        end
-        if center_dist < BattleDistanceMin then
-            BattleDistanceMin = center_dist
-        end
+    local current_combat_agi_distance = Distance(brian_x, combat_last_x, brian_z, combat_last_z)
+    local resulting_distance = current_agi_distance + current_combat_agi_distance
+    local resulting_xp = math.floor((current_agi_distance + current_combat_agi_distance) / 50)
 
-        AddBattleCenter(cx, cz)
-    end
+    GuiText(14, "Agi Glitch Distances:  ")
+    GuiText(15, "-------------------------:  ")
+    GuiText(16, "Current AGI XP: " .. agi_xp)
+    GuiText(17, "Current AGI Progress: " .. Round(current_agi_distance, 2))
+    GuiText(18, "Combat AGI Distance:  " .. Round(current_combat_agi_distance, 2))
+    GuiText(19, "Converted XP:         " .. Round(current_combat_agi_distance / 50, 2))
+    
+    GuiTextWithColor(21, "Resulting AGI Distance: " .. Round(resulting_distance, 2), "cyan")
+    GuiTextWithColor(22, "Resulting AGI XP Bonus: " .. resulting_xp, "cyan")
 
-    EncounterWasActive = encounter_active
-
-    local bdx = x - bx
-    local bdz = z - bz
-    local speed = math.sqrt(dx * dx + dz * dz)
-
-    if use_analog then
-        GuiTextWithColor(4, "Mode:     Precison", "cyan")
-        GuiText(5, "Target:   Brian (Walking)")
-        GuiText(6, "Analog:  " ..analog_y)
-        GuiText(7, "Brian X: " .. Round(x, 1))
-        GuiText(8, "Brian Z: " .. Round(z, 1))
-        GuiText(9, "Brian Angle: " .. Round(angle, 1))
-        GuiText(10, "Brian Speed: " .. Round(speed, 2))
-    else
-        GuiTextWithColor(4, "Mode:     Default", "gray")
-        GuiText(5, "Target:   " .. Ternary(MoveEnemy, "Enemy #" .. MoveEnemyIndex, "Brian"))
-        GuiText(6, "Movement: " .. MovementMagnitude)
-        GuiText(7, "Brian X: " .. Round(x, 1))
-        GuiText(8, "Brian Z: " .. Round(z, 1))
-        GuiText(9, "Brian Angle: " .. Round(angle, 1))
-        GuiText(10, "Brian Speed: " .. Round(speed, 2))
-
-        analog_y = 0
-    end
-
-    GuiText(12, "Agi Dist:  " .. Round(combat_dist, 2))
-
-    GuiText(14, "Map ID:  " .. map)
-    GuiText(15, "Sub Map: " .. submap)
-
-    -- GuiTextRight(5, "Unique Centers: " .. CountUniqueBattleCenters())
-    -- GuiTextRight(6, "Battle Dist: " .. Round(center_dist, 2))
-    -- GuiTextRight(7, "Battle Dist (Min): " .. Round(BattleDistanceMin, 2))
-    -- GuiTextRight(8, "Battle Dist (Max): " .. Round(BattleDistanceMax, 2))
-        
-
-    -- GuiTextRight(9, "Battle Center X: " .. Round(cx, 5))
-    -- GuiTextRight(10, "Battle Center Z: " .. Round(cz, 5))
-    -- GuiTextRight(11, "Battle Delta X: " .. Round(bdx, 2))
-    -- GuiTextRight(12, "Battle Delta Z: " .. Round(bdz, 2))
-
-    -- PrintCombatValues(5)
-
-    if readingCrumbs then
-        ReadCrumbs()
-    end
-    wasReadingCrumbs = readingCrumbs
-
-    GuiTextWithColor(15, "Reading Movement: " .. Ternary(readingCrumbs, "RECORDING", "No"), Ternary(readingCrumbs, "red", "grey"))
-
-    ProcessKeyboardInput()
+    GuiTextWithColor(23, "Leftover AGI Distance: " .. Round(resulting_distance % 50, 2), "yellow")
+    GuiTextWithColor(24, "Updated AGI XP: " .. (agi_xp + resulting_xp), "yellow")
 
     emu.frameadvance()
 end
