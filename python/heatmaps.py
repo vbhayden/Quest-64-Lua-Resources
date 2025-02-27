@@ -210,16 +210,24 @@ def get_data_for_region(data_path: str, region_name: str) -> RegionDefinition:
     return region
 
 
+def plot_crumbs(filename):
+    
+    
+
 def main():
     
-    # region_names = get_region_names("data")
+    # # region_names = get_region_names("data")
     
-    # for name in region_names:
-    #     region = get_data_for_region("data", name)
-    #     density_map = region.calculate_density_map(density=2)      
+    # # for name in region_names:
+    # #     region = get_data_for_region("data", name)
+    # #     density_map = region.calculate_density_map(density=2)      
     
-    region = get_data_for_region("data", "cull-hazard")
-    density_map = region.calculate_density_map(density=5)        
+    # region = get_data_for_region("data", "cull-hazard")
+    # density_map = region.calculate_density_map(density=5)        
+    
+    import sys
+    filename = sys.argv[1]
+    plot_crumbs(filename)
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,6 @@
 
 MEM_BRIAN_POSITION_X = 0x7AA20
+MEM_BRIAN_POSITION_Y = 0x7AA24
 MEM_BRIAN_POSITION_Z = 0x7AA28
 MEM_BRIAN_ROTATION_Y = 0x7AA30
 
@@ -71,9 +72,10 @@ end
 
 function GetBrianLocation()
     local brianX = memory.readfloat(MEM_BRIAN_POSITION_X, true, "RDRAM")
+    local brianY = memory.readfloat(MEM_BRIAN_POSITION_Y, true, "RDRAM")
     local brianZ = memory.readfloat(MEM_BRIAN_POSITION_Z, true, "RDRAM")
     
-    return brianX, brianZ
+    return brianX, brianY, brianZ
 end
 
 function SetBrianLocation(x, z)
@@ -155,7 +157,7 @@ end
 
 function MoveBrianRelative(x, y, z)
     local dx, dy, dz = TransformDirectionForBrian(x, y, z)
-    local brianX, brianZ = GetBrianLocation()
+    local brianX, brianY, brianZ = GetBrianLocation()
 
     SetBrianLocation(brianX + dx * MovementMagnitude, brianZ + dz * MovementMagnitude)
 end
@@ -194,7 +196,7 @@ local min_crumb_distance = 5
 
 local function ReadCrumbs()
 
-    local bx, bz = GetBrianLocation()
+    local bx, by, bz = GetBrianLocation()
 
     if not wasReadingCrumbs then
         last_bx = bx
@@ -419,7 +421,7 @@ while true do
     end
 
     local map, submap = GetMapIDs()
-    local x, z = GetBrianLocation()
+    local x, y, z = GetBrianLocation()
     local dx, dz = GetMovementDelta(x, z)
     local bx, bz = GetLastCombatPosition()
     local angle = GetBrianDirection()
@@ -458,25 +460,27 @@ while true do
         GuiText(5, "Target:   Brian (Walking)")
         GuiText(6, "Analog:  " ..analog_y)
         GuiText(7, "Brian X: " .. Round(x, 1))
-        GuiText(8, "Brian Z: " .. Round(z, 1))
-        GuiText(9, "Brian Angle: " .. Round(angle, 1))
-        GuiText(10, "Brian Speed: " .. Round(speed, 2))
+        GuiText(8, "Brian Y: " .. Round(y, 1))
+        GuiText(9, "Brian Z: " .. Round(z, 1))
+        GuiText(10, "Brian Angle: " .. Round(angle, 1))
+        GuiText(11, "Brian Speed: " .. Round(speed, 2))
     else
         GuiTextWithColor(4, "Mode:     Default", "gray")
         GuiText(5, "Target:   " .. Ternary(MoveEnemy, "Enemy #" .. MoveEnemyIndex, "Brian"))
         GuiText(6, "Movement: " .. MovementMagnitude)
         GuiText(7, "Brian X: " .. Round(x, 1))
-        GuiText(8, "Brian Z: " .. Round(z, 1))
-        GuiText(9, "Brian Angle: " .. Round(angle, 1))
-        GuiText(10, "Brian Speed: " .. Round(speed, 2))
+        GuiText(8, "Brian Y: " .. Round(y, 1))
+        GuiText(9, "Brian Z: " .. Round(z, 1))
+        GuiText(10, "Brian Angle: " .. Round(angle, 1))
+        GuiText(11, "Brian Speed: " .. Round(speed, 2))
 
         analog_y = 0
     end
 
-    GuiText(12, "Agi Dist:  " .. Round(combat_dist, 2))
+    GuiText(13, "Agi Dist:  " .. Round(combat_dist, 2))
 
-    GuiText(14, "Map ID:  " .. map)
-    GuiText(15, "Sub Map: " .. submap)
+    GuiText(15, "Map ID:  " .. map)
+    GuiText(16, "Sub Map: " .. submap)
 
     -- GuiTextRight(5, "Unique Centers: " .. CountUniqueBattleCenters())
     -- GuiTextRight(6, "Battle Dist: " .. Round(center_dist, 2))
@@ -496,7 +500,7 @@ while true do
     end
     wasReadingCrumbs = readingCrumbs
 
-    GuiTextWithColor(15, "Reading Movement: " .. Ternary(readingCrumbs, "RECORDING", "No"), Ternary(readingCrumbs, "red", "grey"))
+    GuiTextWithColor(18, "Reading Movement: " .. Ternary(readingCrumbs, "RECORDING", "No"), Ternary(readingCrumbs, "red", "grey"))
 
     ProcessKeyboardInput()
 
