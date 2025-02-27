@@ -1,28 +1,31 @@
 
-MEM_BRIAN_POSITION_X = 0x7AA20
-MEM_BRIAN_POSITION_Y = 0x7AA24
-MEM_BRIAN_POSITION_Z = 0x7AA28
-MEM_BRIAN_ROTATION_Y = 0x7AA30
+local MEM_BRIAN_POSITION_X = 0x7AA20
+local MEM_BRIAN_POSITION_Y = 0x7AA24
+local MEM_BRIAN_POSITION_Z = 0x7AA28
+local MEM_BRIAN_ROTATION_Y = 0x7AA30
 
-MEM_ENEMY_POSITION_X = 0x7C9BC
-MEM_ENEMY_POSITION_Z = 0x7C9C4
-MEM_ENEMY_ROTATION_Y = 0x7C9CC
+local MEM_ENEMY_POSITION_X = 0x7C9BC
+local MEM_ENEMY_POSITION_Z = 0x7C9C4
+local MEM_ENEMY_ROTATION_Y = 0x7C9CC
 
-MEM_BATTLE_LAST_X = 0x86B18
-MEM_BATTLE_LAST_Z = 0x86B20
+local MEM_BATTLE_LAST_X = 0x86B18
+local MEM_BATTLE_LAST_Z = 0x86B20
 
-MEM_BATTLE_CENTER_X = 0x880B8
-MEM_BATTLE_CENTER_Z = 0x880D8
+local MEM_BATTLE_CENTER_X = 0x880B8
+local MEM_BATTLE_CENTER_Z = 0x880D8
 
-MEM_ENEMY_COUNT = 0x07C993
+local MEM_CURRENT_MAP_ID = 0x0842BF
+local MEM_CURRENT_SUBMAP_ID = 0x0842C3
 
-GUI_CHAR_WIDTH = 10
-GUI_PADDING_RIGHT = 240 + 60
+local MEM_ENEMY_COUNT = 0x07C993
 
-MovementMagnitude = 1
+local GUI_CHAR_WIDTH = 10
+local GUI_PADDING_RIGHT = 240 + 60
 
-MoveEnemy = false
-MoveEnemyIndex = 0
+local MovementMagnitude = 1
+
+local MoveEnemy = false
+local MoveEnemyIndex = 0
 
 local analog_x = 0
 local analog_y = 0
@@ -57,8 +60,8 @@ function GetEnemyCount()
 end
 
 function GetMapIDs()
-    local mapID = memory.readbyte(0x8536B, "RDRAM")
-    local subMapID = memory.readbyte(0x8536F, "RDRAM")
+    local mapID = memory.readbyte(MEM_CURRENT_MAP_ID, "RDRAM")
+    local subMapID = memory.readbyte(MEM_CURRENT_SUBMAP_ID, "RDRAM")
 
     return mapID, subMapID
 end

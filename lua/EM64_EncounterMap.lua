@@ -66,11 +66,14 @@ local CACHED_BLOCK_WIDTH = 200
 -- Memory Values
 local MEM_ENCOUNTER_STEP_DISTANCE = 0x8C574
 local MEM_ENCOUNTER_ACCUMULATION = 0x8C578
-local MEM_CAMERA_ROTATION_Y = 0x86DE8
+local MEM_CAMERA_ROTATION_Y = 0x085E70
 local MEM_GAME_STATE = 0x7B2E4
 local MEM_ALLOW_BATTLES = 0x084F10
-local MEM_BRIAN_POSITION_X = 0x7BACC
-local MEM_BRIAN_POSITION_Z = 0x7BAD4
+local MEM_BRIAN_POSITION_X = 0x7AA20
+local MEM_BRIAN_POSITION_Y = 0x7AA24
+local MEM_BRIAN_POSITION_Z = 0x7AA28
+local MEM_CURRENT_MAP_ID = 0x0842BF
+local MEM_CURRENT_SUBMAP_ID = 0x0842C3
 
 -- GUI Constants
 local GUI_CHAR_WIDTH = 10
@@ -333,13 +336,12 @@ end
 local function GuiRowRightWithColorExplicit(row_index, char_index, text, color, border_width, screen_width)
     
     local resolvedOffset = screen_width - border_width - GUI_PADDING_RIGHT
-
     gui.text(resolvedOffset + char_index * GUI_CHAR_WIDTH, 20 + row_index * 15, text, color)
 end
 
 local function GetMapIDs()
-    local mapID = memory.readbyte(0x8536B, "RDRAM")
-    local subMapID = memory.readbyte(0x8536F, "RDRAM")
+    local mapID = memory.readbyte(MEM_CURRENT_MAP_ID, "RDRAM")
+    local subMapID = memory.readbyte(MEM_CURRENT_SUBMAP_ID, "RDRAM")
 
     return mapID, subMapID
 end
