@@ -64,11 +64,11 @@ local CACHED_BLOCK_WIDTH = 200
 --                                                             --
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
 -- Memory Values
-local MEM_ENCOUNTER_STEP_DISTANCE = 0x8C574
-local MEM_ENCOUNTER_ACCUMULATION = 0x8C578
+local MEM_ENCOUNTER_STEP_DISTANCE = 0x8BFAC
+local MEM_ENCOUNTER_ACCUMULATION = 0x8BFB0
 local MEM_CAMERA_ROTATION_Y = 0x085E70
-local MEM_GAME_STATE = 0x7B2E4
-local MEM_ALLOW_BATTLES = 0x084F10
+local MEM_GAME_STATE = 0x4DCA0
+local MEM_ALLOW_BATTLES = 0x0842E8
 local MEM_BRIAN_POSITION_X = 0x7AA20
 local MEM_BRIAN_POSITION_Y = 0x7AA24
 local MEM_BRIAN_POSITION_Z = 0x7AA28
@@ -216,10 +216,10 @@ end
 
 local function GetEncounterRegionsFromMemory()
 
-    local battles_allowed = AreBattlesAllowed()
-    if not battles_allowed then
-        return {}
-    end
+    -- local battles_allowed = AreBattlesAllowed()
+    -- if not battles_allowed then
+    --     return {}
+    -- end
 
     local regions = {}
 

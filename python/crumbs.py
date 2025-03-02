@@ -42,9 +42,19 @@ def load_crumbs_at_path(filename: str) -> WallDefinition:
 def plot_crumbs(data_path):
     crumbs = load_crumbs_at_path(data_path)
     
+    width = max(crumbs.x) - min(crumbs.x)
+    height = max(crumbs.z) - min(crumbs.z)
+    
+    plt.title(label=data_path)
     plt.plot(crumbs.x, crumbs.z)
     ax = plt.gca()
     ax.set_ylim(ax.get_ylim()[::-1])  # Reverse the Y-axis
+    
+    fig = plt.gcf()
+    fig.set_dpi(100)
+    fig.set_size_inches(width / 500, height / 500)
+    fig.savefig("cull-hazard.png")
+    
     plt.show()
 
 def main():
