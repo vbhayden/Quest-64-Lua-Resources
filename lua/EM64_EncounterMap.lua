@@ -29,7 +29,7 @@ local MAP_ANCHOR_Y = 30
 -- Colors can be provided with either the english name
 -- or a corresponding hex code, accepting both 6 and 8 digits.
 --
-local MAP_LOW_CPU_COLORS = true
+local MAP_LOW_CPU_COLORS = false
 local MAP_COLOR_PLAYER = "cyan"
 local MAP_COLOR_3_TURNS = "red"
 local MAP_COLOR_2_TURNS = "orange"
@@ -217,10 +217,10 @@ end
 
 local function GetEncounterRegionsFromMemory()
 
-    -- local battles_allowed = AreBattlesAllowed()
-    -- if not battles_allowed then
-    --     return {}
-    -- end
+    local battles_allowed = AreBattlesAllowed()
+    if not battles_allowed then
+        return {}
+    end
 
     local regions = {}
 
