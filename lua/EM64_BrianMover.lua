@@ -31,7 +31,7 @@ local analog_x = 0
 local analog_y = 0
 local use_analog = false
 local analog_increment = 1
-local analog_decrement = -5
+local analog_decrement = -1
 local analog_min = 0
 local analog_max = 127
 
@@ -273,22 +273,28 @@ function ProcessKeyboardInput()
         end
     end
 
+    if keys["Left"] == true and previous_keys["Left"] ~= true then
+        if use_analog then
+            UpdateAnalog(0, 5 * analog_decrement)
+        else
+            movementFunc(1, 0, 0)
+        end
+    end
+
+    if keys["Right"] == true and previous_keys["Right"] ~= true then
+        if use_analog then
+            UpdateAnalog(0, 5 * analog_increment)
+        else
+            movementFunc(-1, 0, 0)
+        end
+    end
+
     if keys["Delete"] == true and previous_keys["Delete"] ~= true then
         ClearAnalog()
     end
 
     if use_analog then
         joypad.setanalog({ ['X Axis'] = analog_x, ['Y Axis'] = analog_y, }, 1)
-    end
-
-    if not use_analog then
-        if keys["Left"] == true and previous_keys["Left"] ~= true then
-            movementFunc(1, 0, 0)
-        end
-    
-        if keys["Right"] == true and previous_keys["Right"] ~= true then
-            movementFunc(-1, 0, 0)
-        end
     end
 
     if keys["PageUp"] == true and previous_keys["PageUp"] ~= true then

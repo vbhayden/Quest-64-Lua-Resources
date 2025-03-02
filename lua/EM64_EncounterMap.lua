@@ -29,6 +29,7 @@ local MAP_ANCHOR_Y = 30
 -- Colors can be provided with either the english name
 -- or a corresponding hex code, accepting both 6 and 8 digits.
 --
+local MAP_LOW_CPU_COLORS = true
 local MAP_COLOR_PLAYER = "cyan"
 local MAP_COLOR_3_TURNS = "red"
 local MAP_COLOR_2_TURNS = "orange"
@@ -673,6 +674,15 @@ local function PrintEncounterGrid(centers, grid_width, grid_height, unit_spacing
     -- local text_for_no_regions = ""
     -- local text_for_no_encounters = ""
 
+    local color_player = MAP_COLOR_PLAYER
+    local color_no_region = MAP_COLOR_NO_REGION
+    local color_no_encounters = MAP_COLOR_NO_ENCOUNTERS
+
+    if MAP_LOW_CPU_COLORS then
+        color_no_region = 0xFFFFFFFF
+        color_no_encounters = 0xFFFFFFFF
+    end
+
     for x = 1, #output do
 
         local row = output[x]
@@ -688,6 +698,10 @@ local function PrintEncounterGrid(centers, grid_width, grid_height, unit_spacing
             local result = row[z]
             local color = GetOverlapColor(result.one_turns, result.two_turns, result.three_turns)
             local color = result.color
+
+            if MAP_LOW_CPU_COLORS then
+                color = "white"
+            end
             -- local color = "white"
 
             local gy = z - column_offset
@@ -713,13 +727,13 @@ local function PrintEncounterGrid(centers, grid_width, grid_height, unit_spacing
                     last_encounter_check_result = result
                 end
 
-                GuiCharRightWithColorExplicit(gx, gy, result.overlaps, MAP_COLOR_PLAYER, border_width, screen_width)
+                GuiCharRightWithColorExplicit(gx, gy, result.overlaps, color_player, border_width, screen_width)
             elseif result.overlaps > 0 then
                 GuiCharRightWithColorExplicit(gx, gy, result.overlaps, color, border_width, screen_width)
             elseif result.region_index < 0 then
-                GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_REGION, MAP_COLOR_NO_REGION, border_width, screen_width)
+                GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_REGION, color_no_region, border_width, screen_width)
             else
-                GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_ENCOUNTERS, MAP_COLOR_NO_ENCOUNTERS, border_width, screen_width)
+                GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_ENCOUNTERS, color_no_encounters, border_width, screen_width)
             end
             
             -- if result.center then
