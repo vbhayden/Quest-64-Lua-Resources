@@ -4,9 +4,10 @@ local MEM_BRIAN_POSITION_Y = 0x7AA24
 local MEM_BRIAN_POSITION_Z = 0x7AA28
 local MEM_BRIAN_ROTATION_Y = 0x7AA30
 
-local MEM_ENEMY_POSITION_X = 0x7C9BC
-local MEM_ENEMY_POSITION_Z = 0x7C9C4
-local MEM_ENEMY_ROTATION_Y = 0x7C9CC
+local MEM_ENEMY_POSITION_X = 0x7B934
+local MEM_ENEMY_POSITION_Y = 0x7B938
+local MEM_ENEMY_POSITION_Z = 0x7B93C
+local MEM_ENEMY_ROTATION_Y = 0x7B944
 
 local MEM_BATTLE_LAST_X = 0x86B18
 local MEM_BATTLE_LAST_Z = 0x86B20
@@ -17,7 +18,8 @@ local MEM_BATTLE_CENTER_Z = 0x880D8
 local MEM_CURRENT_MAP_ID = 0x0842BF
 local MEM_CURRENT_SUBMAP_ID = 0x0842C3
 
-local MEM_ENEMY_COUNT = 0x07C993
+local MEM_ENEMY_COUNT = 0x08BE5A
+local MEM_SIZE_ENEMY_BLOCK = 0x130
 
 local GUI_CHAR_WIDTH = 10
 local GUI_PADDING_RIGHT = 240 + 60
@@ -56,7 +58,7 @@ function Ternary ( cond , T , F )
 end
 
 function GetEnemyCount()
-    return memory.readbyte(MEM_ENEMY_COUNT, "RDRAM")
+    return memory.read_u16_be(MEM_ENEMY_COUNT, "RDRAM")
 end
 
 function GetMapIDs()
@@ -74,11 +76,11 @@ function GetLastCombatPosition()
 end
 
 function GetBrianLocation()
-    local brianX = memory.readfloat(MEM_BRIAN_POSITION_X, true, "RDRAM")
-    local brianY = memory.readfloat(MEM_BRIAN_POSITION_Y, true, "RDRAM")
-    local brianZ = memory.readfloat(MEM_BRIAN_POSITION_Z, true, "RDRAM")
-    
-    return brianX, brianY, brianZ
+    local x = memory.readfloat(MEM_BRIAN_POSITION_X, true, "RDRAM")
+    local y = memory.readfloat(MEM_BRIAN_POSITION_Y, true, "RDRAM")
+    local z = memory.readfloat(MEM_BRIAN_POSITION_Z, true, "RDRAM")
+
+    return { x=x, y=y, z=z }
 end
 
 function SetBrianLocation(x, z)
@@ -97,25 +99,26 @@ function SetBrianDirection(angle)
 end
 
 function GetEnemyLocation()
-    local brianX = memory.readfloat(MEM_ENEMY_POSITION_X + MoveEnemyIndex * 296, true, "RDRAM")
-    local brianZ = memory.readfloat(MEM_ENEMY_POSITION_Z + MoveEnemyIndex * 296, true, "RDRAM")
+    local x = memory.readfloat(MEM_ENEMY_POSITION_X + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, true, "RDRAM")
+    local y = memory.readfloat(MEM_ENEMY_POSITION_Y + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, true, "RDRAM")
+    local z = memory.readfloat(MEM_ENEMY_POSITION_Z + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, true, "RDRAM")
     
-    return brianX, brianZ
+    return { x=x, y=y, z=z }
 end
 
 function GetEnemyDirection()
-    local angleRadians = memory.readfloat(MEM_ENEMY_ROTATION_Y + MoveEnemyIndex * 296, true, "RDRAM")
+    local angleRadians = memory.readfloat(MEM_ENEMY_ROTATION_Y + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, true, "RDRAM")
     return angleRadians
 end
 
-function SetEnemyLocation(x, z)
-    
-    memory.writefloat(MEM_ENEMY_POSITION_X + MoveEnemyIndex * 296, x, true, "RDRAM")
-    memory.writefloat(MEM_ENEMY_POSITION_Z + MoveEnemyIndex * 296, z, true, "RDRAM")
+function SetEnemyLocation(x, y, z)
+    memory.writefloat(MEM_ENEMY_POSITION_X + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, x, true, "RDRAM")
+    memory.writefloat(MEM_ENEMY_POSITION_Y + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, y, true, "RDRAM")
+    memory.writefloat(MEM_ENEMY_POSITION_Z + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, z, true, "RDRAM")
 end
 
 function SetEnemyDirection(angle)
-    memory.writefloat(MEM_ENEMY_ROTATION_Y + MoveEnemyIndex * 296, angle, true, "RDRAM")
+    memory.writefloat(MEM_ENEMY_ROTATION_Y + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, angle, true, "RDRAM")
 end
 
 function TransformDirectionForBrian(x, y, z)
@@ -160,16 +163,16 @@ end
 
 function MoveBrianRelative(x, y, z)
     local dx, dy, dz = TransformDirectionForBrian(x, y, z)
-    local brianX, brianY, brianZ = GetBrianLocation()
+    local coord = GetBrianLocation()
 
-    SetBrianLocation(brianX + dx * MovementMagnitude, brianZ + dz * MovementMagnitude)
+    SetBrianLocation(coord.x + dx * MovementMagnitude, coord.z + dz * MovementMagnitude)
 end
 
 function MoveEnemyRelative(x, y, z)
     local dx, dy, dz = TransformDirectionForEnemy(x, y, z)
-    local brianX, brianZ = GetEnemyLocation()
+    local coord = GetEnemyLocation()
 
-    SetEnemyLocation(brianX + dx * MovementMagnitude, brianZ + dz * MovementMagnitude)
+    SetEnemyLocation(coord.x + dx * MovementMagnitude, coord.y, coord.z + dz * MovementMagnitude)
 end
 
 local previous_keys = {}
@@ -199,7 +202,11 @@ local min_crumb_distance = 5
 
 local function ReadCrumbs()
 
-    local bx, by, bz = GetBrianLocation()
+    local coord = GetBrianLocation()
+
+    local bx = coord.x
+    local by = coord.y
+    local bz = coord.z
 
     if not wasReadingCrumbs then
         last_bx = bx
@@ -310,8 +317,9 @@ function ProcessKeyboardInput()
     end
 
     if keys["Tab"] == true and previous_keys["Tab"] ~= true then
+        local total_enemies = GetEnemyCount()
         MoveEnemyIndex = MoveEnemyIndex + 1
-        if MoveEnemyIndex >= 6 then
+        if MoveEnemyIndex >= total_enemies then
             MoveEnemyIndex = 0
         end
     end
@@ -382,10 +390,6 @@ function PrintCombatValues(index)
     end
 end
 
-function GetEnemyCount()
-    return memory.readbyte(0x07C993, "RDRAM")
-end
-
 function IsEncounterActive()
     return GetEnemyCount() > 0
 end
@@ -430,10 +434,15 @@ while true do
     end
 
     local map, submap = GetMapIDs()
-    local x, y, z = GetBrianLocation()
+
+    local coord = Ternary(MoveEnemy, GetEnemyLocation(), GetBrianLocation())
+    local x = coord.x
+    local y = coord.y
+    local z = coord.z
+
     local dx, dz = GetMovementDelta(x, z)
     local bx, bz = GetLastCombatPosition()
-    local angle = GetBrianDirection()
+    local angle = Ternary(MoveEnemy, GetEnemyDirection(), GetBrianDirection())
     local cx, cz = GetCombatCenter()
 
     local cdx = cx - x
@@ -464,24 +473,26 @@ while true do
     local bdz = z - bz
     local speed = math.sqrt(dx * dx + dz * dz)
 
+    local target_name = Ternary(MoveEnemy, "Enemy", "Brian")
+
     if use_analog then
         GuiTextWithColor(4, "Mode:     Precison", "cyan")
         GuiText(5, "Target:   Brian (Walking)")
         GuiText(6, "Analog:  " ..analog_y)
-        GuiText(7, "Brian X: " .. Round(x, 1))
-        GuiText(8, "Brian Y: " .. Round(y, 1))
-        GuiText(9, "Brian Z: " .. Round(z, 1))
-        GuiText(10, "Brian Angle: " .. Round(angle, 1))
-        GuiText(11, "Brian Speed: " .. Round(speed, 2))
+        GuiText(7, target_name .. " X: " .. Round(x, 1))
+        GuiText(8, target_name .. " Y: " .. Round(y, 1))
+        GuiText(9, target_name .. " Z: " .. Round(z, 1))
+        GuiText(10, target_name .. " Angle: " .. Round(angle, 1))
+        GuiText(11, target_name .. " Speed: " .. Round(speed, 5))
     else
         GuiTextWithColor(4, "Mode:     Default", "gray")
         GuiText(5, "Target:   " .. Ternary(MoveEnemy, "Enemy #" .. MoveEnemyIndex, "Brian"))
         GuiText(6, "Movement: " .. MovementMagnitude)
-        GuiText(7, "Brian X: " .. Round(x, 1))
-        GuiText(8, "Brian Y: " .. Round(y, 1))
-        GuiText(9, "Brian Z: " .. Round(z, 1))
-        GuiText(10, "Brian Angle: " .. Round(angle, 1))
-        GuiText(11, "Brian Speed: " .. Round(speed, 2))
+        GuiText(7, target_name .. " X: " .. Round(x, 1))
+        GuiText(8, target_name .. " Y: " .. Round(y, 1))
+        GuiText(9, target_name .. " Z: " .. Round(z, 1))
+        GuiText(10, target_name .. " Angle: " .. Round(angle, 1))
+        GuiText(11, target_name .. " Speed: " .. Round(speed, 5))
 
         analog_y = 0
     end
