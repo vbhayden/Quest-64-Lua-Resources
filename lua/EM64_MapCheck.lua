@@ -26,7 +26,7 @@ local function GetPointerFromAddress(address)
     return TrimPointer(ptr)
 end
 
-local function ReadNavPointers()
+local function ReadNavMesh()
 
     local map, submap = GetMapIDs()
     local ptr_nav_data = GetPointerFromAddress(MEM_PTR_MAP_DATA_NAVIGATION)
@@ -41,14 +41,14 @@ local function ReadNavPointers()
 
     local groups = {}
 
-    console.clear()
+    -- console.clear()
 
     for k=0,total_groups-1 do
         local index = ptr_vert_groups + k * 0x8
         local a = memory.read_u32_be(index + 0x0, "RDRAM")
         local b = memory.read_u32_be(index + 0x4, "RDRAM")
 
-        console.log(string.format("Index: %s, Length %s", a, b))
+        -- console.log(string.format("Index: %s, Length %s", a, b))
 
         groups[#groups+1] = {a=a, b=b}
     end
@@ -77,13 +77,49 @@ local function ReadNavPointers()
             chain[#chain+1] = coord
         end
 
-        console.log(string.format("%08X -> %08X", ptr_index_start, ptr_index_end))
+        chains[#chains+1] = chain
+
+        -- console.log(string.format("%08X -> %08X", ptr_index_start, ptr_index_end))
     end
 
-    console.log(string.format("%08X", ptr_nav_data))
-    console.log(string.format("%08X", ptr_submap_nav_data))
+    console.log(string.format("NavMesh for %s-%s: Found %s shapes!", map, submap, #chains))
+
+    -- console.log(string.format("%08X", ptr_nav_data))
+    -- console.log(string.format("%08X", ptr_submap_nav_data))
 
     return chains
 end
 
-local chains = ReadNavPointers()
+local function WriteNavMesh(path, geometry_chains)
+
+    local file = io.open(path, "w+")
+    if file == nil then 
+        return console.log("Could not open file at path: " .. path)
+    end
+
+    for _, geometry_chain in pairs(geometry_chains) do
+        for __, coord in pairs(geometry_chain) do
+            file:write(string.format("%.2f,%.2f\n", coord.x, coord.z))
+        end
+        file:write("-\n")
+    end
+
+    file:close()
+end
+
+local previous_map, previous_submap = -1
+while true do
+    local map, submap = GetMapIDs()
+    
+    if previous_map ~= map or previous_submap ~= submap then
+    
+        local chains = ReadNavMesh()
+        local filepath = "data/geometry-" .. map .. "-" .. submap .. ".csv"
+        WriteNavMesh(filepath, chains)
+
+        previous_map = map
+        previous_submap = submap
+    end
+
+    emu.frameadvance()
+end
