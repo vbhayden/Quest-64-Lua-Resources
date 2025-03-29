@@ -131,7 +131,7 @@ local function SimulateRNGCall(rngValue, rollAgainst)
     return rollValue
 end
 
-local function GetValidEnemySpells()
+local function GetEnemySpellUsage()
 
     local ptr_enemy_attributes = GetPointerFromAddress(MEM_ENEMY_ANIMATION_START + MEM_OFFSET_ATTRIBUTES, "RDRAM")
     local ptr_enemy_ai_start = GetPointerFromAddress(ptr_enemy_attributes + MEM_OFFSET_AI_START)
@@ -249,7 +249,7 @@ local function ShowPredictionInfo()
     local dz = enemy_z - brian_z
     local distance_to_brian = math.sqrt(dx * dx + dz * dz) - brian_radius * brian_scale
 
-    local spells = GetValidEnemySpells()
+    local spells = GetEnemySpellUsage()
     local rng = memory.read_u32_be(MEM_CURRENT_RNG, "RDRAM")
 
     GuiTextRight(7, string.format("Current Distance: %.2f", distance_to_brian))
