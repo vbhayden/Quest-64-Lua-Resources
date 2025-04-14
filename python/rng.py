@@ -58,8 +58,11 @@ def next_rng(current_rng) -> int:
 
 @njit
 def roll_rng(current_rng, value_range):
+    if value_range == 0:
+        return 0
+
     base = current_rng >> 16
-    roll = base % value_range if value_range > 0 else 0
+    roll = base % value_range
 
     return roll
 
