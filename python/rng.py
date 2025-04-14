@@ -130,7 +130,7 @@ def find_valid_heal_seeds(heal_results, max_hp, water_level, healing_rank, scan_
     min_heal = water_influence + bonus_healing
     heal_range = min_heal >> 2
 
-    for rng in range(scan_start, scan_start + scan_length + 1):
+    for rng in range(scan_start, scan_start + scan_length):
         seed = rng
 
         # if seed % 0x100000 == 0:
@@ -158,41 +158,62 @@ def find_valid_heal_seeds(heal_results, max_hp, water_level, healing_rank, scan_
 
 def main():
 
-    # prepare_lookups()
-
-    # start = time.time()
-
-    # # seeds = find_valid_heal_seeds([31, 36, 36, 34, 31, 33, 36], max_hp=158, water_level=38, healing_rank=2, scan_size=0x000FFFFF)
-    # # seeds = find_valid_heal_seeds([23, 26, 22, 25, 23, 26, 26, 23, 24, 22, 26, 25], max_hp=158, water_level=38, healing_rank=1, scan_size=0x00FFFFFF)
-    # # seeds = find_valid_heal_seeds([24, 23, 23, 22, 26, 26, 25, 26, 22, 22, 25, 22], max_hp=158, water_level=38, healing_rank=1, scan_size=0x00FFFFFF)
-    # seeds = find_valid_heal_seeds(
-    #     heal_results=[24, 22, 24, 22, 24, 24, 25, 23, 25, 23, 25, 24], 
-    #     max_hp=158, 
-    #     water_level=38, 
-    #     healing_rank=1, 
-    #     scan_start=0x00000000,
-    #     scan_length=0xFFFFFFFF
-    # )
+    start = time.time()
+    seeds = find_valid_heal_seeds(
+        heal_results=[24, 22, 24, 22, 24, 24, 25, 23, 25, 23, 25, 24], 
+        max_hp=158, 
+        water_level=38, 
+        healing_rank=1, 
+        scan_start=0x00000000,
+        scan_length=0xFFFFFFFF
+    )
     
-    # stop = time.time()
+    stop = time.time()
 
-    # for seed in seeds:
-    #     print(f"- {seed:8X}")
+    for seed in seeds:
+        print(f"- {seed:8X}")
 
-    # print(f"Elapsed: {stop - start:.2f}, Valid Seeds: {len(seeds)}")
-
-    # # (rng, healing) = simulate_healing_1(0x00000000, water_level=38, max_hp=158)
-    # # print(f"{rng:8X}, {healing}")
-
-    # # (new_rng, value) = roll_rng(0x00000000, 10)
-    # # print(f"{new_rng:8X}, {value}")
-
+    print(f"Elapsed: {stop - start:.2f}, Valid Seeds: {len(seeds)}")
     test()
-    
 
-def call_me(arg):
-    return arg + 2
+def main_multi():
+    from multiprocessing import Process, Pool
+
+    pool = Pool(processes=8)
+
+    heal_results = [24, 22, 24, 22, 24, 24, 25, 23, 25, 23, 25, 24]
+    max_hp = 158
+    water_level = 38 
+    healing_rank = 1 
+    scan_length = 0x20000000
+
+    args = [
+        [
+            heal_results,
+            max_hp,
+            water_level,
+            healing_rank,
+            scan_length * k,
+            scan_length
+        ]
+        for k in range(8)
+    ]
+
+    results = pool.starmap(find_valid_heal_seeds, args)
+    pool.close()
+
+    seeds = []
+    for result in results:
+        seeds = seeds + result
+            
+    for seed in seeds:
+        print(f"- {seed:8X}")
+
+    print(f"Valid Seeds: {len(seeds)}")
 
 if __name__=="__main__":
+    start = time.time()
+    # main_multi()
     main()
+    print(f"Elapsed: {time.time() - start:.2f}")
         
