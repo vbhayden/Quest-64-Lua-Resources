@@ -67,6 +67,16 @@ def roll_rng(current_rng, value_range):
     return roll
 
 @njit
+def simulate_healing_cast_faster(current_rng, min_heal, heal_range):
+
+    # Accuracy check always passes
+    range_rng = advance_rng_2(current_rng)
+    heal_roll = roll_rng(range_rng, heal_range)
+    ending_rng = advance_rng_30(range_rng)
+
+    return (ending_rng, min_heal + heal_roll)
+
+@njit
 def simulate_healing_cast(current_rng, water_level, max_hp, bonus_percent):
 
     # Accuracy check always passes
@@ -114,6 +124,11 @@ def find_valid_heal_seeds(heal_results, max_hp, water_level, healing_rank, scan_
         bonus_coefficient = 0.08
     
     valid_seeds = []
+    bonus_healing = math.floor(bonus_coefficient * max_hp)
+    water_influence = water_level >> 2
+    
+    min_heal = water_influence + bonus_healing
+    heal_range = min_heal >> 2
 
     for rng in range(scan_start, scan_start + scan_length + 1):
         seed = rng
@@ -123,7 +138,14 @@ def find_valid_heal_seeds(heal_results, max_hp, water_level, healing_rank, scan_
 
         success = True
         for expected_heal in heal_results:
-            (rng, healing_amount) = simulate_healing_cast(rng, water_level, max_hp, bonus_coefficient)
+            # (rng, healing_amount) = simulate_healing_cast_faster(rng, min_heal, heal_range)
+
+            range_rng = advance_rng_2(rng)
+            heal_roll = roll_rng(range_rng, heal_range)
+            rng = advance_rng_30(range_rng)
+
+            healing_amount = min_heal + heal_roll
+
             if expected_heal != healing_amount:
                 success = False
                 break
