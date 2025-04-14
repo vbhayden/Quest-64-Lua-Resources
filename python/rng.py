@@ -151,7 +151,7 @@ def find_valid_heal_seeds(heal_results, max_hp, water_level, healing_rank, scan_
                 break
 
         if success:
-            valid_seeds.append(seed)
+            valid_seeds.append((seed, rng))
 
     # print(f"Found {len(valid_seeds)} valid seeds out of {scan_size:8X}")
     return valid_seeds
@@ -181,10 +181,15 @@ def main_multi():
 
     pool = Pool(processes=8)
 
-    heal_results = [24, 22, 24, 22, 24, 24, 25, 23, 25, 23, 25, 24]
+    # heal_results = [24, 22, 24, 22, 24, 24, 25, 23, 25, 23, 25, 24]
+    # max_hp = 158
+    # water_level = 38 
+    # healing_rank = 1 
+    
+    heal_results = [32, 34, 37, 31, 33, 37, 34, 35, 32, 31, 33, 32, 37, 37, 34, 34]
     max_hp = 158
     water_level = 38 
-    healing_rank = 1 
+    healing_rank = 2
     scan_length = 0x20000000
 
     args = [
@@ -206,14 +211,14 @@ def main_multi():
     for result in results:
         seeds = seeds + result
             
-    for seed in seeds:
-        print(f"- {seed:8X}")
+    for (start_seed, current_seed) in seeds:
+        print(f"- {start_seed:8X} -> {current_seed:8X}")
 
     print(f"Valid Seeds: {len(seeds)}")
 
 if __name__=="__main__":
     start = time.time()
-    # main_multi()
-    main()
+    main_multi()
+    # main()
     print(f"Elapsed: {time.time() - start:.2f}")
         
