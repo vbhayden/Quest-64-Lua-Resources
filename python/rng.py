@@ -133,18 +133,23 @@ def find_valid_heal_seeds(heal_results, max_hp, water_level, healing_rank, scan_
     for rng in range(scan_start, scan_start + scan_length):
         seed = rng
 
-        # if seed % 0x100000 == 0:
-        #     print(f"{seed=:8X} ...")
-
         success = True
         for expected_heal in heal_results:
-            # (rng, healing_amount) = simulate_healing_cast_faster(rng, min_heal, heal_range)
+            # @njit
+            # def advance_rng_2(current_rng) -> int:
+            #     return (current_rng * a_2 + c_2) & 0xFFFFFFFF
+            range_rng = (rng * a_2 + c_2) & 0xFFFFFFFF
+            
+            healing_amount = min_heal
+            if heal_range > 0:
+                base = range_rng >> 16
+                roll = base % heal_range
+                healing_amount += roll
 
-            range_rng = advance_rng_2(rng)
-            heal_roll = roll_rng(range_rng, heal_range)
-            rng = advance_rng_30(range_rng)
-
-            healing_amount = min_heal + heal_roll
+            # @njit
+            # def advance_rng_30(current_rng) -> int:
+            #     return (current_rng * a_30 + c_30) & 0xFFFFFFFF
+            rng = (range_rng * a_30 + c_30) & 0xFFFFFFFF
 
             if expected_heal != healing_amount:
                 success = False
@@ -181,11 +186,6 @@ def main_multi():
 
     pool = Pool(processes=8)
 
-    # heal_results = [24, 22, 24, 22, 24, 24, 25, 23, 25, 23, 25, 24]
-    # max_hp = 158
-    # water_level = 38 
-    # healing_rank = 1 
-    
     heal_results = [32, 34, 37, 31, 33, 37, 34, 35, 32, 31, 33, 32, 37, 37, 34, 34]
     max_hp = 158
     water_level = 38 
@@ -207,9 +207,7 @@ def main_multi():
     results = pool.starmap(find_valid_heal_seeds, args)
     pool.close()
 
-    seeds = []
-    for result in results:
-        seeds = seeds + result
+    seeds = [seed for result in results for seed in result] 
             
     for (start_seed, current_seed) in seeds:
         print(f"- {start_seed:8X} -> {current_seed:8X}")
@@ -217,6 +215,7 @@ def main_multi():
     print(f"Valid Seeds: {len(seeds)}")
 
 if __name__=="__main__":
+    print("Starting ...")
     start = time.time()
     main_multi()
     # main()
