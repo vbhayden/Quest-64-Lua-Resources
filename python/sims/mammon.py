@@ -168,11 +168,28 @@ a = 0x41C64E6D
 c = 0x3039
 m = 2**32
 
-a_240, c_240 = advance_lcg(a, c, m, 240)
-a_90, c_90 = advance_lcg(a, c, m, 90)
-a_31, c_31 = advance_lcg(a, c, m, 31)
-a_30, c_30 = advance_lcg(a, c, m, 30)
-a_2, c_2 = advance_lcg(a, c, m, 2)
+a_240=0x3BE331C1
+c_240=0xDEA2B5D0
+a_90=0x9E7E03C9
+c_90=0x948784C6
+a_31=0xF53981E5
+c_31=0x0202A263
+a_30=0x4E6A7659
+c_30=0x961D9892
+a_2=0xC2A29A69
+c_2=0xD3DC167E
+
+# a_240, c_240 = advance_lcg(a, c, m, 240)
+# a_90, c_90 = advance_lcg(a, c, m, 90)
+# a_31, c_31 = advance_lcg(a, c, m, 31)
+# a_30, c_30 = advance_lcg(a, c, m, 30)
+# a_2, c_2 = advance_lcg(a, c, m, 2)
+
+# print(f"{a_240=:8X}, {c_240=:8X}")
+# print(f"{a_90=:8X}, {c_90=:8X}")
+# print(f"{a_31=:8X}, {c_31=:8X}")
+# print(f"{a_30=:8X}, {c_30=:8X}")
+# print(f"{a_2=:8X}, {c_2=:8X}")
 
 @njit
 def advance_rng_240(current_rng) -> int:
@@ -534,7 +551,7 @@ def simulate_brian_melee(seed, weakness_active=False):
     total_elements = TOTAL_ELEMENTS
     influence = math.floor(total_elements * 1.5)
     
-    reduction_threshold = math.floor(total_elements / 4)
+    reduction_threshold = total_elements >> 2
     attack_reduction = 0
 
     if ELEMENT_FIRE > reduction_threshold:
@@ -550,7 +567,7 @@ def simulate_brian_melee(seed, weakness_active=False):
         attack_reduction += ELEMENT_WIND - reduction_threshold
 
     spirit_influence = influence - attack_reduction
-    attack_power = math.floor(spirit_influence * BRIAN_STAFF_POWER / 16)
+    attack_power = (spirit_influence * BRIAN_STAFF_POWER) >> 4
     enemy_defense = MAMMON_DEFENSE
     if weakness_active:
         enemy_defense = enemy_defense >> 1
@@ -915,6 +932,7 @@ def test_rock_1():
             print(f"     -- Seed: {sim_seed:8X}, expected {expectation.final_seed:8X}")
 
 def test_avalanche():
+
     print("-- Avalanche Testing --")
     
     for k, expectation in enumerate(AVALANCHE_EXPECTATIONS):
