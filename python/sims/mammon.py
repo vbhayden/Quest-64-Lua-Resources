@@ -5,7 +5,7 @@ import math
 import numpy as np
 
 from typing import Tuple, List
-from numba import njit, float32
+from numba import njit, longlong
 from dataclasses import dataclass
 
 BRIAN_X = 78.32734
@@ -30,6 +30,7 @@ ELEMENT_WIND = 3
 MAMMON_X = -20.16924
 MAMMON_Z = -349.5814
 
+MAMMON_HP = 2300
 MAMMON_DEFENSE = 100
 MAMMON_AGILITY = 150
 MAMMON_ATTACK = 41
@@ -50,9 +51,9 @@ DECISION_WEAKNESS = 3
 DECISION_CONFUSION = 4
 DECISION_HEALING_ITEM = 5
 DECISION_MANA_ITEM = 6
-DECISION_WATER_1 = 7
-DECISION_ROCK_1 = 8
-DECISION_MELEE = 9
+DECISION_MELEE = 7
+DECISION_WATER_1 = 8
+DECISION_ROCK_1 = 9
 
 decision_map = {
     DECISION_BARRIER: "Barrier",
@@ -725,6 +726,65 @@ def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, mammon_stats
     
     return DECISION_PASS, seed
 
+attack_decisions = np.array([DECISION_AVALANCHE, DECISION_MELEE, DECISION_ROCK_1, DECISION_WATER_1], dtype=int)
+expensive_decisions = np.array([DECISION_AVALANCHE, DECISION_BARRIER, DECISION_CONFUSION], dtype=int)
+
+@njit()
+def simulate_brian_turn_explicit(seed, decision_code, can_attack, brian_stats, brian_buffs, mammon_stats, mammon_debuffs) -> int:
+
+    if not can_attack and decision_code in attack_decisions:
+        return seed
+
+    can_afford_spells = brian_stats[1] > 3
+
+    if not can_afford_spells and decision_code in expensive_decisions:
+        return seed
+
+    weakness_currently_active = mammon_debuffs[0] > 0
+
+    if decision_code == DECISION_AVALANCHE:
+        rock_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, weakness_currently_active)
+        brian_stats[1] -= 3
+        mammon_stats[0] -= avalanche_damage
+        return avalanche_seed
+    
+    if decision_code == DECISION_BARRIER:
+        barrier_hit, barrier_roll, barrier_turns, barrier_seed = simulate_barrier(seed)
+        brian_stats[1] -= 3
+        if barrier_hit:
+            brian_buffs[0] = barrier_turns + 1
+        return barrier_seed
+    
+    if decision_code == DECISION_WEAKNESS:
+        weakness_hit, weakness_roll, weakness_turns, weakness_seed = simulate_weakness(seed)
+        brian_stats[1] -= 3
+        if weakness_hit:
+            mammon_debuffs[0] = weakness_turns
+        return weakness_seed
+    
+    if decision_code == DECISION_CONFUSION:
+        confusion_hit, _, confusion_turns, confusion_seed = simulate_confusion(seed)
+        brian_stats[1] -= 3
+        if confusion_hit:
+            brian_buffs[1] = confusion_turns + 1
+        return confusion_seed
+    
+    elif decision_code == DECISION_MELEE:
+        melee_hit, melee_damage, melee_seed = simulate_brian_melee(seed, weakness_currently_active)
+        brian_stats[1] += 1
+        mammon_stats[0] -= melee_damage
+        return melee_seed
+
+    elif decision_code == DECISION_MANA_ITEM:
+        brian_stats[1] = BRIAN_MP
+        return seed
+    
+    elif decision_code == DECISION_HEALING_ITEM:
+        brian_stats[0] = BRIAN_HP
+        return seed
+
+    return seed
+
 @njit()
 def simulate_mammon_attack_roll(seed, spell_accuracy, spell_power):
     
@@ -808,10 +868,7 @@ def end_brian_turn(buffs):
 @njit()
 def sim_mammon_randomly(seed, stop_after):
 
-    brian_hp = BRIAN_HP
-    brian_mp = BRIAN_MP
-    
-    brian_stats = [brian_hp, brian_mp]
+    brian_stats = [BRIAN_HP, BRIAN_MP]
     brian_buffs = [
         0, # Barrier
         0  # Confusion
@@ -876,6 +933,69 @@ def sim_bulk(starting_seed, exits, heals, sim_count):
             decision_result = decisions
 
     return best_turns, decision_result
+
+
+@njit()
+def sim_mammon_brute_force(seed: int, decision_codes: np.longlong, max_turns=16):
+    
+    brian_stats = [BRIAN_HP, BRIAN_MP]
+    brian_buffs = [0, 0]
+    mammon_stats = [MAMMON_HP]
+    mammon_debuffs = [0]
+
+    turns = 0
+    CANNOT_ATTACK_UNTIL = 2
+
+    combat_seed = seed
+        
+    while brian_stats[0] > 0 and mammon_stats[0] > 0 and turns < max_turns:
+        
+        decision_code = (decision_codes >> turns * 4) % 16
+        iter_seed = simulate_brian_turn_explicit(combat_seed, decision_code, turns >= CANNOT_ATTACK_UNTIL, brian_stats, brian_buffs, mammon_stats, mammon_debuffs)
+        
+        if mammon_stats[0] < 0:
+            mammon_stats[0] = 0
+        
+        if brian_buffs[0] > 0:
+            brian_buffs[0] -= 1
+        if brian_buffs[1] > 0:
+            brian_buffs[1] -= 1
+        
+        if mammon_stats[0] > 0:
+            iter_seed = simulate_mammon_turn(iter_seed, brian_stats, brian_buffs, brian_buffs[0])
+        
+        turns += 1
+        combat_seed = iter_seed
+
+    if brian_stats[0] > 0 and mammon_stats[0] > 0:
+        return False, turns, decision_codes
+    
+    if brian_stats[0] > 0:
+        return True, turns, decision_codes
+        
+    return False, turns, decision_codes
+
+# @njit()
+def sim_bulk_brute_force(starting_seed, decision_cap, max_turns=12):
+    
+    best_code = 0x0
+    best_turns = 0
+    decision_code = 0x0
+    digit_offset = 0
+    while decision_code < decision_cap:
+
+        # success, turns, _ = sim_mammon_brute_force(starting_seed, decision_code, max_turns)
+        # if success and turns < best_turns:
+        #     best_code = decision_code
+
+        if (decision_code >> 4 * digit_offset) & 0xF == (decision_cap >> 4 * digit_offset) & 0xF:
+            decision_code &= ~(0xF << (digit_offset * 4))
+            decision_code += 1 << ((digit_offset + 1) * 4)
+            # digit_offset += 1
+        else:
+            decision_code += 1 << (digit_offset * 4)
+
+        print(f"{decision_code:8X} of {decision_cap:8X}")
 
 @njit()
 def run_sim(starting_seed, sim_count, heal_variance, exit_variance):
@@ -952,7 +1072,7 @@ def test():
     test_avalanche()
     
 def main():
-    test()
+    # test()
     start = time.time()
     
     seed = 0x2B825F46
@@ -964,20 +1084,29 @@ def main():
     #     decision_code = (decisions >> turn * 4) % 16
     #     print(decision_code, get_decision_text(decision_code))
     
-    heal_range = 5
-    exit_range = 5
-    sim_count = 5000
+    # heal_range = 5
+    # exit_range = 5
+    # sim_count = 5000
     
-    (heals, exits, turns, decisions) = run_sim(seed, sim_count, heal_range, exit_range)
+    # (heals, exits, turns, decisions) = run_sim(seed, sim_count, heal_range, exit_range)
     
-    end = time.time()
+    # end = time.time()
     
-    for turn in range(turns):
-        decision_code = (decisions >> turn * 4) % 16
-        print(decision_code, get_decision_text(decision_code))
+    # for turn in range(turns):
+    #     decision_code = (decisions >> turn * 4) % 16
+    #     print(decision_code, get_decision_text(decision_code))
 
-    print(f"{turns=} {heals=} {exits=}")
-    print(f"Elapsed: {end-start:.2f}, Total Sims: {heal_range * exit_range * sim_count}")
+    # print(f"{turns=} {heals=} {exits=}")
+    # print(f"Elapsed: {end-start:.2f}, Total Sims: {heal_range * exit_range * sim_count}")
+
+    # success, turns, decisions = sim_mammon_brute_force(seed, 0x1321221122122)
+    # print(f"{seed:8X}--------") 
+    # print(f"{success=} {turns=}")
+    # for turn in range(turns):
+    #     decision_code = (decisions >> turn * 4) % 16
+    #     print(decision_code, get_decision_text(decision_code))
+
+    sim_bulk_brute_force(0x00000000, 0x33333333)
 
 if __name__=="__main__":
     main()
