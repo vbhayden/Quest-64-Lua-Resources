@@ -1,3 +1,3 @@
 from sims import mammon
 
-mammon.test()
+mammon.main()

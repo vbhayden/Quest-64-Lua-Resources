@@ -877,7 +877,8 @@ local function DrawMissPredictionRow(index, name, missPredicted)
     GuiTextRightWithColor(index, string.format("%s - %s", miss_icon, name), row_color)
 end
 
--- SimulateCastAvalanche()
+print_now = true
+SimulateCastAvalanche()
 
 while true do
 
@@ -934,13 +935,15 @@ while true do
     DrawDamageHandler(9, "Rock One", Ternary(rockHit, 1, 0), rockDamage, bodyColor)
     DrawDamageHandler(10, "Melee Attack", Ternary(meleeHit, 1, 0), meleeDamage, bodyColor)
 
+    local current_seed = string.format("%8X", GetCurrentRNG())
+
     if combatActive then
         local spellRows = 11
         local infoStart = spellRows + 1
     
         local bossHealth = enemyInfo.hp .. " of " .. enemyInfo.hpMax
     
-        GuiTextWithColor(infoStart + 1, "Combat Info", "white")
+        GuiTextWithColor(infoStart + 1, "Combat Info - " .. current_seed, "white")
         GuiTextWithColor(infoStart + 2, "-----------------------", "white")
         GuiTextWithColor(infoStart + 3, "Boss Health: " .. bossHealth, "white")
         GuiTextWithColor(infoStart + 4, "Barrier Turns: " .. brianInfo.barrierTurns, Ternary(brianInfo.barrierTurns > 1, "cyan", "yellow"))

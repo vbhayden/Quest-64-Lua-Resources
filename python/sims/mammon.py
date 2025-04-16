@@ -1,8 +1,11 @@
 import rng
+import time
 import random
 import math
+import numpy as np
 
-from numba import njit
+from typing import Tuple, List
+from numba import njit, float32
 from dataclasses import dataclass
 
 BRIAN_X = 78.32734
@@ -16,6 +19,7 @@ BRIAN_FIRE = 1
 BRIAN_EARTH = 50
 BRIAN_WATER = 44
 BRIAN_WIND = 1
+BRIAN_STAFF_POWER = 16
 TOTAL_ELEMENTS = BRIAN_FIRE + BRIAN_EARTH + BRIAN_WATER + BRIAN_WIND
 
 ELEMENT_FIRE = 0
@@ -39,7 +43,36 @@ SPELL_POWER_WATER_1 = 365
 SPELL_POWER_WATER_2 = 374
 SPELL_POWER_WATER_3 = 384
 
-BONUS_TABLE = [
+DECISION_PASS = 0
+DECISION_BARRIER = 1
+DECISION_AVALANCHE = 2
+DECISION_WEAKNESS = 3
+DECISION_CONFUSION = 4
+DECISION_HEALING_ITEM = 5
+DECISION_MANA_ITEM = 6
+DECISION_WATER_1 = 7
+DECISION_ROCK_1 = 8
+DECISION_MELEE = 9
+
+decision_map = {
+    DECISION_BARRIER: "Barrier",
+    DECISION_AVALANCHE: "Avalanche",
+    DECISION_WEAKNESS: "Weakness 2",
+    DECISION_CONFUSION: "Confusion",
+    DECISION_HEALING_ITEM: "Healing Item",
+    DECISION_MANA_ITEM: "Mana Item",
+    DECISION_WATER_1: "Water 1",
+    DECISION_ROCK_1: "Rock 1",
+    DECISION_MELEE: "Melee",
+    DECISION_PASS: "Pass",
+}
+
+def get_decision_text(decision_code):
+    if decision_code in decision_map:
+        return decision_map[decision_code]
+    return f"Unknown: {decision_code}"
+
+BONUS_TABLE = np.array([
     0.0240, # Level 1,  Bonus Percent: 2.4%,
     0.0281, # Level 2,  Bonus Percent: 2.8%,
     0.0324, # Level 3,  Bonus Percent: 3.2%,
@@ -105,14 +138,68 @@ BONUS_TABLE = [
     0.7451, # Level 63, Bonus Percent: 74.5%,
     0.7708, # Level 64, Bonus Percent: 77.1%,
     0.7973, # Level 65, Bonus Percent: 79.7%
-]
+], dtype=np.float32)
+
+BONUS_TOTAL = len(BONUS_TABLE)
+BONUS_MAX = BONUS_TABLE[-1]
+BONUS_MIN = 0.2
+
+MAMMON_SPELLS = np.array([
+    # rng   acc%    count   power   dispels
+    [ 0,    85,     1,      320,    1 ],    # Light
+    [ 90,   100,    1,      480,    0 ],    # Waves
+    [ 240,  100,    8,      50,     0 ]     # Arrows
+], dtype=np.int32)
+
+def advance_lcg(a, c, m, steps):
+    a_n = pow(a, steps, m)
+
+    sum_ = 0
+    cur = 1
+    for _ in range(steps):
+        sum_ = (sum_ + cur) % m
+        cur = (cur * a) % m
+
+    c_n = (c * sum_) % m
+    return a_n, c_n
+
+# Constants
+a = 0x41C64E6D
+c = 0x3039
+m = 2**32
+
+a_240, c_240 = advance_lcg(a, c, m, 240)
+a_90, c_90 = advance_lcg(a, c, m, 90)
+a_31, c_31 = advance_lcg(a, c, m, 31)
+a_30, c_30 = advance_lcg(a, c, m, 30)
+a_2, c_2 = advance_lcg(a, c, m, 2)
+
+@njit
+def advance_rng_240(current_rng) -> int:
+    return (current_rng * a_240 + c_240) & 0xFFFFFFFF
+
+@njit
+def advance_rng_90(current_rng) -> int:
+    return (current_rng * a_90 + c_90) & 0xFFFFFFFF
+
+@njit
+def advance_rng_31(current_rng) -> int:
+    return (current_rng * a_31 + c_31) & 0xFFFFFFFF
+
+@njit
+def advance_rng_30(current_rng) -> int:
+    return (current_rng * a_30 + c_30) & 0xFFFFFFFF
+
+@njit
+def advance_rng_2(current_rng) -> int:
+    return (current_rng * a_2 + c_2) & 0xFFFFFFFF
 
 @njit
 def next_rng(current_rng) -> int:
     return (current_rng * 0x41C64E6D + 0x3039) & 0xFFFFFFFF
 
 @njit
-def roll_rng(current_rng, value_range):
+def roll_rng(current_rng: int, value_range: int):
     if value_range == 0:
         return 0
 
@@ -121,12 +208,23 @@ def roll_rng(current_rng, value_range):
 
     return roll
 
-def roll(max_value):
+@njit()
+def roll_for_variation(max_value):
     return random.randint(1, max_value)
 
+@njit()
 def coinflip():
-    return roll(2) == 1
+    return roll_for_variation(2) == 1
 
+@njit
+def get_mammon_spells():
+    return MAMMON_SPELLS
+
+@njit()
+def get_bonus_table():
+    return BONUS_TABLE
+
+@njit()
 def get_brian_element_power(element):
 
     fire_factor = BRIAN_FIRE >> 3
@@ -152,16 +250,19 @@ def get_brian_element_power(element):
     
     return fire_factor + earth_factor + water_factor + wind_factor
 
-def get_spell_bonus(attack_power):
-    
-    if attack_power >= len(BONUS_TABLE):
-        return BONUS_TABLE[-1]
+@njit()
+def get_spell_bonus(attack_power: int) -> float:
+        
+    if attack_power >= BONUS_TOTAL:
+        return BONUS_MAX
 
     if attack_power < 0:
-        return 0.2
+        return BONUS_MIN
+    
+    table = get_bonus_table()
+    return table[attack_power]
 
-    return BONUS_TABLE[attack_power]
-
+@njit()
 def calculate_hit_chance(attacker_agi, defender_agi):
     
     top = attacker_agi * 100.0
@@ -170,21 +271,40 @@ def calculate_hit_chance(attacker_agi, defender_agi):
     hit_chance = math.floor(top / bottom)
     return hit_chance
 
-def calculate_brian_min_damage(element, spell_power):
+@njit()
+def calculate_brian_min_damage(element: int, spell_power: int, weakness_active: bool):
     
-    elementLevel = get_brian_element_power(element)
-    bonusPercent = get_spell_bonus(elementLevel - 1)
+    element_level = get_brian_element_power(element)
+    spell_bonus = get_spell_bonus(element_level - 1)
 
-    resultingPower = spell_power * bonusPercent
+    resulting_power = spell_power * spell_bonus
 
-    affinityCoefficient = 0.5
-    rawDamage = resultingPower * affinityCoefficient
+    affinity = 0.5
+    raw_damage = resulting_power * affinity
 
-    defenseCoefficient = TOTAL_ELEMENTS / (TOTAL_ELEMENTS + MAMMON_DEFENSE)
-    minDamage = math.floor(math.floor(rawDamage) * defenseCoefficient)
+    enemy_defense = MAMMON_DEFENSE
+    if weakness_active:
+        enemy_defense *= 0.5
+    
+    defense_coefficient = TOTAL_ELEMENTS / (TOTAL_ELEMENTS + enemy_defense)
+    damage_min = math.floor(math.floor(raw_damage) * defense_coefficient)
 
-    return minDamage
+    return damage_min
 
+@njit()
+def calculate_enemy_min_damage(attack_power, spell_power):
+
+    bonus_percent = get_spell_bonus(attack_power)
+    resulting_power = spell_power * bonus_percent
+    
+    raw_damage = resulting_power
+    
+    defense_coefficient = attack_power / (attack_power + BRIAN_DEFENSE)
+    damage_min = math.floor(math.floor(raw_damage) * defense_coefficient)
+    
+    return damage_min
+
+@njit()
 def does_rock_overlap_mammon(rock_x, rock_z):
     dx = rock_x - MAMMON_X
     dz = rock_z - MAMMON_Z
@@ -199,7 +319,8 @@ def does_rock_overlap_mammon(rock_x, rock_z):
     overlaps = distance <= (rock_radius + enemy_bounds)
     return overlaps
 
-def simulate_avalanche_rock_hit(seed):
+@njit()
+def simulate_avalanche_rock_hit(seed: int, weakness_active) -> Tuple[bool, int, int]:
     
     accuracy_seed = next_rng(seed)    
     agility_seed = next_rng(accuracy_seed)
@@ -211,7 +332,7 @@ def simulate_avalanche_rock_hit(seed):
         return False, 0, agility_seed
     
     damage_seed = next_rng(agility_seed)
-    damage_min = calculate_brian_min_damage(ELEMENT_EARTH, SPELL_POWER_AVALANCHE)
+    damage_min = calculate_brian_min_damage(ELEMENT_EARTH, SPELL_POWER_AVALANCHE, weakness_active)
     damage_range = math.floor(math.sqrt(damage_min))
     damage_roll = roll_rng(damage_seed, damage_range + 1)
     
@@ -219,7 +340,8 @@ def simulate_avalanche_rock_hit(seed):
     
     return True, damage, damage_seed
 
-def simulate_avalanche(seed, debug=False):
+@njit()
+def simulate_avalanche(seed: int, weakness_active=False, debug=False):
     rock_overlaps = 0
     rock_hits = 0
     total_damage = 0
@@ -229,32 +351,44 @@ def simulate_avalanche(seed, debug=False):
     harmless_duration = 4
     max_rocks = 10
 
-    active_rocks = []
-    collision_queue = []
+    rock_coords = np.zeros((10, 2), dtype=np.float32)
+    rock_properties = np.zeros((10, 2), dtype=np.uint8)
     
-    if debug:
-        print(f"[{seed:08X}] == START ==")
+    rocks_released = 0
+    collisions_observed = 0
+    collisions_processed = 0
+    
+    COLLISION_DISABLED = 0
+    COLLISION_QUEUED = 1
+    COLLISION_PROCESSED = 2
+    
+    # if debug:
+    #     print(f"[{seed:08X}] == START ==")
 
     for current_frame in range(1, rock_delay * 10 + harmless_duration * 2 + 1):
-        for i, rock in enumerate(active_rocks):
+        for rock_index in range(rocks_released):
 
-            collision_enabled = rock["frames_active"] >= harmless_duration
-            rock_can_damage = collision_enabled and not rock["already_collided"]
+            (x, z) = rock_coords[rock_index]
+            (frames_active, collision_state) = rock_properties[rock_index]
+
+            collision_enabled = frames_active >= harmless_duration
+            rock_can_damage = collision_enabled and collision_state != COLLISION_PROCESSED
             
             if rock_can_damage:
                 
-                recently_activated = rock["frames_active"] == harmless_duration
-                if recently_activated:
-                    if debug:
-                        print(f"[{seed:08X}] PRE-COLLISION, Rock {i+1}")
+                # recently_activated = rock["frames_active"] == harmless_duration
+                # if recently_activated:
+                #     if debug:
+                #         print(f"[{seed:08X}] PRE-COLLISION, Rock {i+1}")
                 
-                overlaps_enemy = does_rock_overlap_mammon(rock["x"], rock["z"])
+                overlaps_enemy = does_rock_overlap_mammon(x, z)
                 if overlaps_enemy:
-                    collision_queue.append(rock)
-                
-            rock["frames_active"] += 1
+                    rock_properties[rock_index, 1] = COLLISION_QUEUED
+                    collisions_observed += 1
+            
+            rock_properties[rock_index, 0] += 1
         
-        allow_more_rocks = len(active_rocks) < max_rocks
+        allow_more_rocks = rocks_released < max_rocks
         if allow_more_rocks and (current_frame >= next_rock_at):
             
             next_rock_at = next_rock_at + rock_delay
@@ -273,87 +407,380 @@ def simulate_avalanche(seed, debug=False):
             rock_x = BRIAN_X - offset * math.sin(angle)
             rock_z = BRIAN_Z - offset * math.cos(angle)
             
-            if debug:
-                print(f"[{seed:08X}] {len(active_rocks)+1}: {rock_x:.1f}, {rock_z:.1f}")
-            
-            rock = {
-                "frames_active": 0,
-                "already_collided": False,
-                "x": rock_x,
-                "z": rock_z
-            }
-            
-            active_rocks.append(rock)
+            rock_coords[rocks_released] = [rock_x, rock_z]
+            rocks_released += 1
 
-        if len(collision_queue) > 0:
-            for rock in collision_queue:
+        if collisions_processed < collisions_observed:
+            for rock_index in range(10):
                 
-                rock["already_collided"] = True
-                rock_overlaps += 1
-                
-                hit, damage, final_seed = simulate_avalanche_rock_hit(seed)
-                if hit:
-                    rock_hits += 1
-                    total_damage += damage
+                collision_state = rock_properties[rock_index, 1]
+                if collision_state == COLLISION_QUEUED:
+                    rock_overlaps += 1
                     
-                seed = final_seed
+                    hit, damage, final_seed = simulate_avalanche_rock_hit(seed, weakness_active)
+                    if hit:
+                        rock_hits += 1
+                        total_damage += damage
+                        
+                    seed = final_seed
                 
-                if debug:
-                    print(f"[{seed:8X}] POST-COLLISION, Rock {i+1} - {hit}: {damage}")
-                    print(f"[{seed:8X}] POST-COLLISION, Rock {i+1} - {rock["x"]:.1f}, {rock["z"]:.1f}")
-                
-            collision_queue.clear()
+                    # if debug:
+                    #     print(f"[{seed:8X}] POST-COLLISION, Rock {i+1} - {hit}: {damage}")
+                    #     print(f"[{seed:8X}] POST-COLLISION, Rock {i+1} - {rock["x"]:.1f}, {rock["z"]:.1f}")
+                        
+                    collisions_processed += 1
+                    rock_properties[rock_index, 1] = COLLISION_PROCESSED
     
-        if debug:
-            print(f"[{seed:08X}] Frame {current_frame}")
+        # if debug:
+        #     print(f"[{seed:08X}] Frame {current_frame}")
     
     return rock_hits, total_damage, seed
 
-def simulate_barrier(seed, buffs):
-    pass
+@njit()
+def simulate_barrier(seed):
+    
+    hit_seed = advance_rng_31(seed)
+    hit_roll = roll_rng(hit_seed, 100)
+    if hit_roll >= 90:
+        return False, hit_roll, 0, hit_seed
+    
+    turn_seed = next_rng(hit_seed)
+    turns = 2 + roll_rng(turn_seed, 2)
+    
+    return True, hit_roll, turns, turn_seed
 
-def simulate_confusion(seed, buffs):
-    pass
+@njit()
+def simulate_confusion(seed):
 
+    hit_seed = next_rng(seed)
+    hit_roll = roll_rng(hit_seed, 100)
+    if hit_roll >= 90:
+        return False, hit_roll, 0, advance_rng_30(hit_seed)
+    
+    turn_seed = next_rng(hit_seed)
+    turns = 2 + roll_rng(turn_seed, 5)
+    
+    return True, hit_roll, turns, advance_rng_30(turn_seed)
+
+@njit()
 def simulate_weakness(seed):
-    pass
+    
+    hit_seed = next_rng(seed)
+    hit_roll = roll_rng(hit_seed, 100)
+    if hit_roll >= 90:
+        return False, hit_roll, 0, advance_rng_30(hit_seed)
+    
+    agility_seed = next_rng(hit_seed)
+    agility_chance = calculate_hit_chance(BRIAN_AGILITY, MAMMON_AGILITY)
+    agility_roll = roll_rng(agility_seed, 100)
+    
+    if agility_roll >= agility_chance:
+        return False, agility_roll, 0, advance_rng_30(agility_seed)
+    
+    status_seed = next_rng(agility_seed)
+    status_chance = 20
+    status_roll = roll_rng(status_seed, 32)
+    
+    if status_roll >= status_chance:
+        return False, status_roll, 0, advance_rng_30(status_seed)
+    
+    turn_seed = next_rng(status_seed)
+    turns = 2 + roll_rng(turn_seed, 5)
+    
+    return True, status_roll, turns, advance_rng_30(turn_seed)
 
-def simulate_brian_turn(seed, can_attack, brian_hp, brian_mp, buffs, mammon_debuffs):
+@njit()
+def simulate_generic_damaging_spell(seed, element, spell_power, weakness_active=False):
+    
+    accuracy_seed = next_rng(seed)
+    accuracy_roll = roll_rng(accuracy_seed, 100)
+    if accuracy_roll >= 100:
+        return False, 0, accuracy_seed
+    
+    hit_seed = next_rng(accuracy_seed)
+    hit_chance = calculate_hit_chance(BRIAN_AGILITY, MAMMON_AGILITY)
+    hit_roll = roll_rng(hit_seed, 100)
+
+    if hit_roll >= hit_chance:
+        return False, 0, hit_seed
+
+    damage_seed = next_rng(hit_seed)
+    damage_min = calculate_brian_min_damage(element, spell_power, weakness_active)
+    damage_range = math.floor(math.sqrt(damage_min))
+
+    damage_roll = roll_rng(damage_seed, damage_range + 1)
+    damage = damage_min + damage_roll
+
+    return True, damage, damage_seed
+
+@njit()
+def simulate_water_1(seed, weakness_active=False):
+    seed = advance_rng_30(seed)
+    return simulate_generic_damaging_spell(seed, ELEMENT_WATER, SPELL_POWER_WATER_1, weakness_active)
+
+@njit()
+def simulate_rock_1(seed, weakness_active=False):
+    return simulate_generic_damaging_spell(seed, ELEMENT_EARTH, SPELL_POWER_ROCK_1, weakness_active)
+
+@njit()
+def simulate_brian_melee(seed, weakness_active=False):
+    agility_seed = next_rng(seed)
+    agility_chance = calculate_hit_chance(BRIAN_AGILITY, MAMMON_AGILITY)
+    agility_roll = roll_rng(agility_seed, 100)
+
+    if agility_roll >= agility_chance:
+        return False, 0, agility_seed
+
+    total_elements = TOTAL_ELEMENTS
+    influence = math.floor(total_elements * 1.5)
+    
+    reduction_threshold = math.floor(total_elements / 4)
+    attack_reduction = 0
+
+    if ELEMENT_FIRE > reduction_threshold:
+        attack_reduction += ELEMENT_FIRE - reduction_threshold
+    
+    if ELEMENT_EARTH > reduction_threshold:
+        attack_reduction += ELEMENT_EARTH - reduction_threshold
+    
+    if ELEMENT_WATER > reduction_threshold:
+        attack_reduction += ELEMENT_WATER - reduction_threshold
+    
+    if ELEMENT_WIND > reduction_threshold:
+        attack_reduction += ELEMENT_WIND - reduction_threshold
+
+    spirit_influence = influence - attack_reduction
+    attack_power = math.floor(spirit_influence * BRIAN_STAFF_POWER / 16)
+    enemy_defense = MAMMON_DEFENSE
+    if weakness_active:
+        enemy_defense = enemy_defense >> 1
+    defense_coefficient = attack_power / (attack_power + enemy_defense)
+
+    damage_seed = next_rng(agility_seed)
+    damage_min = math.floor(attack_power * defense_coefficient)
+    damage_range = math.floor(math.sqrt(damage_min) + 1)
+    damage = damage_min + roll_rng(damage_seed, damage_range)
+
+    return True, damage, damage_seed
+
+@njit()
+def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, mammon_stats, mammon_debuffs) -> Tuple[int, int]:
     cannot_attack = not can_attack
     
-    can_afford_spells = brian_mp >= 3
+    can_afford_spells = brian_stats[1] >= 3
+    can_afford_cheap_spells = brian_stats[1] >= 1
     
-    # rockHits, avalancheDamage, avalancheSeed = simulate_avalanche(seed, brian_info, mammon_info)
+    weakness_currently_active = mammon_debuffs[0] > 0
+    
+    rock_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, weakness_currently_active)
+    melee_hit, melee_damage, melee_seed = simulate_brian_melee(seed, weakness_currently_active)
+    water_hit, water_damage, water_seed = simulate_water_1(seed, weakness_currently_active)
+    rock_hit, rock_damage, rock_seed = simulate_rock_1(seed, weakness_currently_active)
 
-    # if can_afford_spells and avalancheDamage >= mammon_info.hp then
-    #     SpendBrianMana(brian_info, 3)
-    #     return ProcessBrianTurn(avalancheSeed, brian_info, mammon_info, "Avalanche", avalancheDamage)
-    # end
+    ## Can we kill Mammon right now
+    ##
+    ## Check the damaging spells + melee to see if any will
+    ## end the fight right now.
+    ##
+    if can_afford_spells and avalanche_damage >= mammon_stats[0]:
+        brian_stats[1] -= 3
+        mammon_stats[0] -= avalanche_damage
+        return DECISION_AVALANCHE, avalanche_seed
     
-    weakness_bias = cannot_attack or roll(3) == 1
-    weakness_expiring_soon = mammon_debuffs[0] <= 2
+    if can_afford_cheap_spells:
+        if water_damage >= mammon_stats[0]:
+            brian_stats[1] -= 1
+            mammon_stats[0] -= water_damage
+            return DECISION_WATER_1, water_seed
+        
+        if rock_damage >= mammon_stats[0]:
+            brian_stats[1] -= 1
+            mammon_stats[0] -= rock_damage
+            return DECISION_ROCK_1, rock_seed
+        
+    if melee_damage >= mammon_stats[0]:
+        brian_stats[1] += 1
+        mammon_stats[0] -= melee_damage
+        return DECISION_MELEE, melee_seed
     
+    ## Check for Weakness and Barrier options
+    ##
+    ## These are always wildcards, as we don't use Weakness in normal playthroughs
+    ## but manips use it pretty heavily.  Barrier is also different here, as we
+    ## will sometimes 
+    ##
+    weakness_bias = cannot_attack or (roll_for_variation(3) == 1)
+    weakness_not_strong = mammon_debuffs[0] <= 2
+    weakness_hit, weakness_roll, weakness_turns, weakness_seed = simulate_weakness(seed)
+    
+    if can_afford_spells and weakness_not_strong and weakness_bias and weakness_hit and weakness_turns >= 3:
+        brian_stats[1] -= 3
+        mammon_debuffs[0] = weakness_turns
+
+        return DECISION_WEAKNESS, weakness_seed
     
     barrier_bias = cannot_attack or coinflip()
-    barrier_unreliable = buffs[0] <= 1
+    barrier_unreliable = brian_buffs[0] <= 1
+    barrier_hit, barrier_roll, barrier_turns, barrier_seed = simulate_barrier(seed)
     
-    # local weakness_bias = cannot_attack or roll(3) == 1
-    # local weakness_expiring_soon = mammon_info.weaknessTurns <= 2
-    # local weaknessHit, weaknessRoll, weaknessTurns, weaknessSeed = SimulateCastWeakness(seed, brian_info, mammon_info)
+    if can_afford_spells and barrier_unreliable and barrier_hit and barrier_bias:
+        brian_stats[1] -= 3
+        brian_buffs[0] = barrier_turns + 1
 
-    # local barrier_bias = Coinflip() or cannot_attack
-    # local barrier_unreliable = brian_info.barrierTurns <= 1
-    # local barrierHit, barrierRoll, barrierTurns, barrierSeed = SimulateCastBarrier(seed, brian_info)
-
-    # if can_afford_spells and weakness_expiring_soon and weakness_bias and weaknessHit and weaknessTurns >= 3 then
-    #     SpendBrianMana(brian_info, 3)
-    #     mammon_info.weaknessTurns = weaknessTurns
-
-    #     return ProcessBrianTurn(weaknessSeed, brian_info, mammon_info, "Weakness", 0)
-    # end
+        return DECISION_BARRIER, barrier_seed
     
-    return seed, "Passed"
+    if brian_stats[0] <= 99 and coinflip():
+        brian_stats[0] = BRIAN_HP
+        return DECISION_HEALING_ITEM, seed
+    
+    ## Confusion Check
+    ##
+    ## Prioritize the confusion roll bias when we're low on mana,
+    ## with much lower odds when we're comfy.
+    ##
+    confusion_bias = (brian_stats[1] <= 9 and roll_for_variation(3) == 1) or (roll_for_variation(6) == 1)
+    confusion_not_strong = brian_buffs[1] <= 1
+    confusion_hit, _, confusion_turns, confusion_seed = simulate_confusion(seed)
+    
+    if can_afford_spells and confusion_not_strong and confusion_bias and confusion_hit and confusion_turns >= 2:
+        brian_stats[1] -= 3
+        brian_buffs[1] = confusion_turns
+        return DECISION_CONFUSION, confusion_seed
+    
+    
+    if can_attack and can_afford_spells and coinflip() and avalanche_damage >= 200:
+        brian_stats[1] -= 3
+        mammon_stats[0] -= avalanche_damage
+        return DECISION_AVALANCHE, avalanche_seed
+    
+    melee_bias = ((not can_afford_spells) and coinflip()) or (roll_for_variation(4) == 1)
+    if melee_hit and melee_bias:
+        brian_stats[1] += 1
+        mammon_stats[0] -= melee_damage
+        return DECISION_MELEE, melee_seed
+    
+    if can_attack and can_afford_spells and avalanche_damage >= 100:
+        brian_stats[1] -= 3
+        mammon_stats[0] -= avalanche_damage
+        return DECISION_AVALANCHE, avalanche_seed
+    
+    ## Check for mana
+    ##
+    ## We could've rolled confusion earlier, but getting here and still needing mana
+    ## may pose a risk.
+    ##
+    if brian_stats[1] <= 20 and roll_for_variation(2) <= 2:
+        brian_stats[1] = BRIAN_MP
+        return DECISION_MANA_ITEM, seed
 
+    ## Prefer to heal here, but allow for variance
+    ##
+    elif brian_stats[1] < 3 and roll_for_variation(10) >= 2:
+        brian_stats[1] = BRIAN_MP
+        return DECISION_MANA_ITEM, seed
+    
+    
+    ## Last Options for randomness 
+    ##
+    ## We didn't roll for any of the major spells, so these will add some variance
+    ## to the process overall, with Water 1 giving 30+ advances alone and the other 
+    ## two options giving much smaller amounts than the normal spells.
+    ##
+    if melee_hit and roll_for_variation(4) == 1:
+        brian_stats[1] += 1
+        mammon_stats[0] -= melee_damage
+        return DECISION_MELEE, melee_seed
+
+    elif can_attack and water_hit and roll_for_variation(3) == 1:
+        brian_stats[1] -= 1
+        mammon_stats[0] -= water_damage
+        return DECISION_WATER_1, water_seed
+
+    elif rock_hit and roll_for_variation(2) == 1:
+        brian_stats[1] -= 1
+        mammon_stats[0] -= rock_damage
+        return DECISION_ROCK_1, rock_seed
+
+    elif can_attack and can_afford_spells and coinflip():
+        brian_stats[1] -= 3
+        mammon_stats[0] -= avalanche_damage
+        return DECISION_AVALANCHE, avalanche_seed
+    
+    return DECISION_PASS, seed
+
+@njit()
+def simulate_mammon_attack_roll(seed, spell_accuracy, spell_power):
+    
+    hit_seed = next_rng(seed)
+    hit_roll = roll_rng(hit_seed, 100)
+    if hit_roll >= spell_accuracy:
+        return False, 0, hit_seed
+    
+    agi_seed = next_rng(hit_seed)
+    agi_roll = roll_rng(agi_seed, 100)
+    agi_chance = calculate_hit_chance(MAMMON_AGILITY, BRIAN_AGILITY)
+    if agi_roll >= agi_chance:
+        return False, 0, agi_seed
+    
+    damage_seed = next_rng(agi_seed)
+    damage_min = calculate_enemy_min_damage(MAMMON_ATTACK, spell_power)
+    damage_range = math.floor(math.sqrt(damage_min))
+    
+    damage_roll = roll_rng(damage_seed, damage_range + 1)
+    damage = damage_min + damage_roll
+    
+    return True, damage, damage_seed
+
+@njit()
+def simulate_mammon_turn(seed, brian_stats, brian_buffs, barrier_turns):
+    
+    # print(f"MAMMON 1: {seed:8X}")
+    
+    ai_seed = next_rng(seed)
+    ai_roll = roll_rng(ai_seed, 3)
+    
+    spells = get_mammon_spells()
+    spell = spells[ai_roll]
+    
+    # print(f"MAMMON 2: {ai_seed:8X}")
+    
+    if spell[0] == 90:
+        ai_seed = advance_rng_90(ai_seed)
+    elif spell[0] == 240:
+        ai_seed = advance_rng_240(ai_seed)
+    
+    if barrier_turns > 0:
+        # print(f"MAMMON X: {ai_seed:8X}")
+        return ai_seed
+    
+    total_damage = 0
+    
+    spell_accuracy = spell[1]
+    spell_hits = spell[2]
+    spell_power = spell[3]
+    will_remove_buffs = spell[4] > 0
+    
+    for k in range(spell_hits):
+        
+        hit_brian, damage, ai_seed = simulate_mammon_attack_roll(ai_seed, spell_accuracy, spell_power)
+        
+        if hit_brian:
+            
+            brian_has_confusion = brian_buffs[1] > 0
+            if brian_has_confusion:
+                brian_stats[1] += damage
+                if brian_stats[1] > BRIAN_MP:
+                    brian_stats[1] = BRIAN_MP
+            
+            if will_remove_buffs:
+                brian_buffs[1] = 0
+                
+            brian_stats[0] -= damage
+            total_damage += damage
+    
+    return ai_seed
+
+@njit()
 def end_brian_turn(buffs):
     k = 0
     while k < len(buffs):
@@ -361,69 +788,178 @@ def end_brian_turn(buffs):
             buffs[k] -= 1
         k += 1 
 
+@njit()
 def sim_mammon_randomly(seed, stop_after):
 
     brian_hp = BRIAN_HP
-    brian_mp = BRIAN_HP
-    brian_barrier_turns = 0
-    brian_confusion_turns = 0
+    brian_mp = BRIAN_MP
     
-    brian_buffs = [0, 0]
+    brian_stats = [brian_hp, brian_mp]
+    brian_buffs = [
+        0, # Barrier
+        0  # Confusion
+    ]
+    mammon_stats = [2300]
     mammon_debuffs = [0]
     
-    mammon_hp = 2300
+    decision_result = np.longlong(0)
     
-    decisions = []
     turns = 0
     CANNOT_ATTACK_UNTIL = 2
 
-    while brian_hp > 0 and mammon_hp > 0 and turns < stop_after:
+    combat_seed = seed
         
-        seed, decision = simulate_brian_turn(seed, turns >= CANNOT_ATTACK_UNTIL, brian_buffs, mammon_debuffs)
+    while brian_stats[0] > 0 and mammon_stats[0] > 0 and turns < stop_after:
+        
+        decision, iter_seed = simulate_brian_turn(combat_seed, turns >= CANNOT_ATTACK_UNTIL, brian_stats, brian_buffs, mammon_stats, mammon_debuffs)
+        
+        # print(f"{combat_seed:8X}->{iter_seed:8X}", decision, get_decision_text(decision), brian_stats, brian_buffs)
+        
+        if mammon_stats[0] < 0:
+            mammon_stats[0] = 0
+        
         end_brian_turn(brian_buffs)
         
-#         summaryLine = summaryLine .. decision
-
-#         seed = brianSeed
-
-#         EndBrianTurn(brian_info)
+        decision_result += decision << turns * 4
         
-#         if mammon_info.hp > 0 then
-#             local mammonSeed, brianDamage, mammonSpell = SimulateMammonMove(seed, mammon_info, brian_info)
-#             seed = mammonSeed
-
-#             EndMammonTurn(mammon_info)
-
-#             summaryLine = summaryLine .. ", " .. mammonSpell.name
-#         end
+        if mammon_stats[0] > 0:
+            iter_seed = simulate_mammon_turn(iter_seed, brian_stats, brian_buffs, brian_buffs[0])
         
-#         summaryLine = summaryLine .. ", " .. brian_info.hp
-#         summaryLine = summaryLine .. ", " .. mammon_info.hp
+        turns += 1
+        combat_seed = iter_seed
 
-#         decisions[#decisions+1] = summaryLine
+    if brian_stats[0] > 0 and mammon_stats[0] > 0:
+        return False, turns, decision_result
+    
+    if brian_stats[0] > 0:
+        return True, turns, decision_result
         
-#         turns = turns + 1
-#     end
+    return False, turns, decision_result
 
-#     if brian_info.hp > 0 and mammon_info.hp > 0 then
-#         return false, turns, decisions
-#     end
+@njit()
+def sim_bulk(starting_seed, exits, heals, sim_count):
+    
+    best_turns = 1000
+    decision_result = np.longlong(0)
+    
+    seed = starting_seed
+    
+    for exit_casts in range(exits):
+        seed = advance_rng_30(seed)
+        
+    for exit_casts in range(heals):
+        seed = advance_rng_31(seed)
+        
+    for k in range(sim_count):
+        
+        success, turns, decisions = sim_mammon_randomly(seed, 15)
+        
+        if success and (best_turns > turns):
+            best_turns = turns
+            decision_result = decisions
 
-#     if brian_info.hp > 0 then
-#         return true, turns, decisions
-#     end
+    return best_turns, decision_result
 
-#     if mammon_info.hp > 0 then
-#         return false, turns, decisions
-#     end
-# end
+@njit()
+def run_sim(starting_seed, sim_count, heal_variance, exit_variance):
+    
+    heal_count = 0
+    exit_count = 0
+    best_turns = 1000
+    decision_result = np.longlong(0)
+    
+    for heals in range(heal_variance):
+        for exits in range(exit_variance):
+            turns, decisions = sim_bulk(starting_seed, exits, heals, sim_count)
+            if turns < best_turns:
+                best_turns = turns
+                decision_result = decisions
+                heal_count = heals
+                exit_count = exits
+    
+    return heal_count, exit_count, best_turns, decision_result
+
+@dataclass
+class DamageExpectation:
+    start_seed: int
+    final_seed: int
+    hits: int
+    damage: int
+    weakness_active: bool = False
+
+ROCK_1_EXPECTATIONS = [
+    DamageExpectation(start_seed=0xA9DA80E6, final_seed=0x2578327D, hits=1, damage=41)
+]
+
+AVALANCHE_EXPECTATIONS = [
+    DamageExpectation(start_seed=0x7CD824BA, final_seed=0x7F34193C, hits=2, damage=139),
+    DamageExpectation(start_seed=0x22A21E98, final_seed=0x12857CA4, hits=4, damage=273),
+    DamageExpectation(start_seed=0x027659D4, final_seed=0x7F76085D, hits=3, damage=256, weakness_active=True),
+    DamageExpectation(start_seed=0x20C7EE06, final_seed=0x8FA5CAA7, hits=1, damage=93, weakness_active=True),
+]
+
+def test_rock_1():
+    print("-- Rock 1 Testing --")
+    
+    for k, expectation in enumerate(ROCK_1_EXPECTATIONS):
+        print(f"  -- Case {k}:")
+        (sim_hit, sim_damage, sim_seed) = simulate_rock_1(expectation.start_seed, weakness_active=expectation.weakness_active)
+        sim_hits = 1 if sim_hit else 0
+        
+        if (sim_hits, sim_damage, sim_seed) == (expectation.hits, expectation.damage, expectation.final_seed):
+            print("    -- passed!")
+        else:
+            print("    -- Failed!")
+            print(f"     -- Hits: {sim_hits}, expected {expectation.hits}")
+            print(f"     -- Damage: {sim_damage}, expected {expectation.damage}")
+            print(f"     -- Seed: {sim_seed:8X}, expected {expectation.final_seed:8X}")
+
+def test_avalanche():
+    print("-- Avalanche Testing --")
+    
+    for k, expectation in enumerate(AVALANCHE_EXPECTATIONS):
+        print(f"  -- Case {k}:")
+        (sim_hits, sim_damage, sim_seed) = simulate_avalanche(expectation.start_seed, weakness_active=expectation.weakness_active)
+        
+        if (sim_hits, sim_damage, sim_seed) == (expectation.hits, expectation.damage, expectation.final_seed):
+            print("    -- passed!")
+        else:
+            print("    -- Failed!")
+            print(f"     -- Hits: {sim_hits}, expected {expectation.hits}")
+            print(f"     -- Damage: {sim_damage}, expected {expectation.damage}")
+            print(f"     -- Seed: {sim_seed:8X}, expected {expectation.final_seed:8X}")
 
 def test():
-    (hits, damage, seed) = simulate_avalanche(0x6E79DE97, debug=True)
-    print(f"{hits=} {damage=} {seed=:8X}")
-
+    test_rock_1()
+    test_avalanche()
+    
 def main():
     test()
+    start = time.time()
+    
+    seed = 0x2B825F46
+    
+    # success, turns, decisions = sim_mammon_randomly(seed, 15)
+    # print(f"{seed:8X}--------") 
+    # print(f"{success=} {turns=}")
+    # for turn in range(turns):
+    #     decision_code = (decisions >> turn * 4) % 16
+    #     print(decision_code, get_decision_text(decision_code))
+    
+    heal_range = 5
+    exit_range = 5
+    sim_count = 5000
+    
+    (heals, exits, turns, decisions) = run_sim(seed, sim_count, heal_range, exit_range)
+    
+    end = time.time()
+    
+    for turn in range(turns):
+        decision_code = (decisions >> turn * 4) % 16
+        print(decision_code, get_decision_text(decision_code))
+
+    print(f"{turns=} {heals=} {exits=}")
+    print(f"Elapsed: {end-start:.2f}, Total Sims: {heal_range * exit_range * sim_count}")
 
 if __name__=="__main__":
     main()
