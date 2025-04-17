@@ -1,3 +1,4 @@
 from sims import mammon
 
-mammon.main()
+if __name__=="__main__":
+    mammon.main()

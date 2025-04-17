@@ -593,7 +593,7 @@ def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, mammon_stats
     cannot_attack = not can_attack
     
     can_afford_spells = brian_stats[1] >= 3
-    can_afford_cheap_spells = brian_stats[1] >= 1
+    # can_afford_cheap_spells = brian_stats[1] >= 1
     
     weakness_currently_active = mammon_debuffs[0] > 0
     
@@ -950,7 +950,7 @@ def sim_bulk(starting_seed, exits, heals, sim_count, max_turns=16):
     return best_turns, decision_result
 
 @njit()
-def increment_against_hex_cap(current, hex_cap):
+def increment_against_hex_cap(current: np.longlong, hex_cap: np.longlong) -> np.longlong:
 
     if current == hex_cap:
         return current
@@ -973,7 +973,7 @@ def increment_against_hex_cap(current, hex_cap):
     
     return current + increment
 
-# @njit()
+@njit()
 def sim_mammon_brute_force(seed: int, decision_codes: np.longlong, max_turns=16):
     
     brian_stats = [BRIAN_HP, BRIAN_MP]
@@ -1016,13 +1016,15 @@ def sim_mammon_brute_force(seed: int, decision_codes: np.longlong, max_turns=16)
     return False, turns, decision_codes
 
 @njit()
-def sim_bulk_brute_force(starting_seed, decision_cap, max_turns=16):
+def sim_bulk_brute_force(starting_seed: int, decision_cap: np.longlong, max_turns=16) -> Tuple[int, np.longlong]:
     
-    best_code = 0xFFFF
+    best_decisions = np.longlong(0xFFFF)
     best_turns = 999
-    decision_code = 0x0
+    decision_code = np.longlong(0)
     
     while decision_code < decision_cap:
+        
+        # print (f"{decision_code=:3X} ...")
         
         # if decision_code % 0x8000000 == 0:
         #     print (f"{decision_code=:12X} ...")
@@ -1030,12 +1032,12 @@ def sim_bulk_brute_force(starting_seed, decision_cap, max_turns=16):
         success, turns, _ = sim_mammon_brute_force(starting_seed, decision_code, max_turns)
         if success and turns < best_turns:
             # print(f"New Best!  {turns} turns with {decision_code:16X}")
-            best_code = decision_code
+            best_decisions = decision_code
             best_turns = turns
 
         decision_code = increment_against_hex_cap(decision_code, decision_cap)
 
-    return best_code
+    return best_turns, best_decisions
 
 @njit()
 def run_sim(starting_seed, sim_count, heal_variance, exit_variance, max_turns=16):
@@ -1048,6 +1050,32 @@ def run_sim(starting_seed, sim_count, heal_variance, exit_variance, max_turns=16
     for heals in range(heal_variance+1):
         for exits in range(exit_variance+1):
             turns, decisions = sim_bulk(starting_seed, exits, heals, sim_count, max_turns)
+            if turns < best_turns:
+                best_turns = turns
+                decision_result = decisions
+                heal_count = heals
+                exit_count = exits
+                # print("New best! ", turns)
+    
+    return heal_count, exit_count, best_turns, decision_result
+
+@njit()
+def run_sim_brute_force(starting_seed, decision_cap, heal_variance, exit_variance, max_turns=12):
+    heal_count = 0
+    exit_count = 0
+    best_turns = 1000
+    decision_result = np.longlong(0)
+    
+    for heals in range(heal_variance+1):
+        for exits in range(exit_variance+1):
+            
+            advanced_seed = starting_seed
+            for _ in range(heals):
+                advanced_seed = advance_rng_31(advanced_seed)
+            for _ in range(exits):
+                advanced_seed = advance_rng_30(advanced_seed)
+            
+            turns, decisions = sim_bulk_brute_force(advanced_seed, decision_cap, max_turns)
             if turns < best_turns:
                 best_turns = turns
                 decision_result = decisions
@@ -1074,7 +1102,6 @@ class MammonExpectation:
 ROCK_1_EXPECTATIONS = [
     DamageExpectation(start_seed=0xA9DA80E6, final_seed=0x2578327D, hits=1, damage=41)
 ]
-
 AVALANCHE_EXPECTATIONS = [
     DamageExpectation(start_seed=0x7CD824BA, final_seed=0x7F34193C, hits=2, damage=139),
     DamageExpectation(start_seed=0x22A21E98, final_seed=0x12857CA4, hits=4, damage=273),
@@ -1136,10 +1163,13 @@ def test():
     test_mammon_turn()
     
 def main():
+    
+    from multiprocessing import Pool
+    
     # test()
     start = time.time()
     
-    seed = 0x2B825F46
+    seed = 0x084C487C
     
     # success, turns, decisions = sim_mammon_randomly(seed, 20)
     # print(f"{seed:8X}--------") 
@@ -1148,12 +1178,40 @@ def main():
     #     decision_code = (decisions >> turn * 4) % 16
     #     print(decision_code, get_decision_text(decision_code))
     
-    heal_range = 10
-    exit_range = 10
+    heal_range = 13
+    exit_range = 13
     sim_count = 1000
+    max_turns = 12
     
-    (heals, exits, turns, decisions) = run_sim(seed, sim_count, heal_range, exit_range, max_turns=16)
+    # (heals, exits, turns, decisions) = run_sim(seed, sim_count, heal_range, exit_range, max_turns=16)
+        
+    pool = Pool(processes=8)
+    args = [
+        [
+            seed,
+            sim_count,
+            heal_range,
+            exit_range,
+            max_turns
+        ]
+        for _ in range(8)
+    ]
+    results = pool.starmap(run_sim, args)
+    pool.close()
+            
     end = time.time()
+    
+    turns = 99
+    decisions = 0xF
+    exits = 0
+    heals = 0
+    
+    for [iter_heals, iter_exits, iter_turns, iter_decisions] in results:
+        if iter_turns < turns:
+            decisions = iter_decisions
+            heals = iter_heals
+            exits = iter_exits
+            turns = iter_turns
     
     for turn in range(turns):
         decision_code = (decisions >> turn * 4) % 16
@@ -1180,14 +1238,21 @@ def main():
         decision_code = (decisions >> turn * 4) % 16
         print(decision_code, get_decision_text(decision_code))
 
-    # if bf_success:
-    #     print(f"Fight success! {bf_turns} turns with {decisions:16X}")
+    if bf_success:
+        print(f"Fight success! {bf_turns} turns with {decisions:16X}")
 
-    # best_code = sim_bulk_brute_force(0x0, 0x44444444444444)
-    # print(f"Done!  Best Code: {best_code:16X}")
+    # heal_range = 1
+    # exit_range = 1
+    # decision_cap = 0x3333333333
     
-    end = time.time()
-    print(f"Elapsed: {end-start:.2f}")
+    # best_code = run_sim_brute_force(seed, decision_cap, heal_range, exit_range)
+    # print(f"Done!  Best Code: {best_code:10X}")
+    
+    # end = time.time()
+    # print(f"Elapsed: {end-start:.2f}")
+    
+    # turns, decisions = sim_bulk_brute_force(seed, 0x33333333333333, max_turns=14)
+    # print(turns, decisions)
 
 # 0x2B825F46
 # turns=9 heals=7 exits=6
