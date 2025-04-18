@@ -1,4 +1,5 @@
-from sims import mammon
+from sims import mammon, guilty
 
 if __name__=="__main__":
-    mammon.main()
+    # mammon.main()
+    guilty.main()
