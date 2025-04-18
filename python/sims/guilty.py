@@ -38,7 +38,7 @@ GUILTY_AGILITY = 120
 GUILTY_ATTACK = 34
 GUILTY_SIZE_MODIFIER = np.float32(0.056)
 GUILTY_SIZE_RAW = 170
-GUILTY_SIZE = np.float32(GUILTY_SIZE_MODIFIER * GUILTY_SIZE_RAW)
+GUILTY_SIZE = 9.52
 
 AVALANCHE_ROCK_ELEVATIONS = np.array([
     82.4 - 50.0,
@@ -402,26 +402,87 @@ def calculate_enemy_min_damage(attack_power, spell_power) -> int:
     return damage_min
 
 @njit()
-def does_rock_overlap_guilty(rock_x, rock_y, rock_z, guilty_x, guilty_z):
+def does_capsule_overlap_sphere(c_radius, c_height, cx, cy, cz, s_radius, sx, sy, sz):
+    planar_dx = cx - sx
+    planar_dz = cz - sz
+    planar_distance = math.sqrt(planar_dx**2 + planar_dz**2)
     
-    GUILTY_VERTICAL_AABB_RANGE = np.float32(24.64)
-    vertical_aabb_range = GUILTY_POSITION_Y + GUILTY_VERTICAL_AABB_RANGE
+    skin_width = 3.5
     
-    if rock_y > vertical_aabb_range:
+    if planar_distance > (s_radius + c_radius):
         return False
+
+    if cy <= sy <= cy + c_height:
+        return True
     
-    dx = np.float32(rock_x) - np.float32(guilty_x)
-    dz = np.float32(rock_z) - np.float32(guilty_z)
+    # bottom_dy = cy - sy
+    # bottom_distance = math.sqrt(planar_distance**2 + bottom_dy**2)
+    
+    # if bottom_distance < (s_radius + c_radius + skin_width):
+    #     return True
 
-    size = np.float32(GUILTY_SIZE)
-    skin_width = 0.0
-    enemy_bounds = np.float32(size) + np.float32(size) * np.float32(skin_width)
-    distance = np.float32(math.sqrt(np.float32(dx * dx) + np.float32(dz * dz)))
+    top_dy = (cy + c_height) - sy
+    top_distance = math.sqrt(planar_distance**2 + top_dy**2)
+    
+    if top_distance < (s_radius + c_radius + skin_width):
+        return True
 
-    rock_radius = np.float32(10.0)
+    return False
 
-    overlaps = np.float32(distance) < np.float32(rock_radius + enemy_bounds)
+
+@njit()
+def does_rock_overlap_guilty(rock_x, rock_y, rock_z, guilty_x, guilty_z):
+   
+    guilty_radius = 9.52
+    guilty_height = np.float32(24.64) - guilty_radius
+    
+    guilty_y = 50.0
+        
+    overlaps = does_capsule_overlap_sphere(guilty_radius, guilty_height, guilty_x, guilty_y, guilty_z, 10.0, rock_x, rock_y, rock_z)
+    
+    # if overlaps:
+    #     planar_dx = guilty_x - rock_x
+    #     planar_dz = guilty_z - rock_z
+    #     planar_distance = math.sqrt(planar_dx**2 + planar_dz**2)
+    #     planar_contact = (planar_distance - (10.0 + guilty_radius)) < 0
+        
+    #     top_dy = (guilty_y + guilty_height) - rock_y
+    #     top_distance = math.sqrt(planar_distance**2 + top_dy**2)
+    
+    #     # print("OVERLAP:: PLANAR:", planar_distance, planar_contact, ", TOP DIST:", top_distance)
+    
     return overlaps
+    
+    # vertical_aabb_range = GUILTY_POSITION_Y + guilty_height
+    
+    # if rock_y > vertical_aabb_range:
+    #     return False
+    
+    # dx = np.float32(rock_x) - np.float32(guilty_x)
+    # dz = np.float32(rock_z) - np.float32(guilty_z)
+
+    # size = np.float32(GUILTY_SIZE)
+    # skin_width = 0.0
+    # enemy_bounds = np.float32(size) + np.float32(size) * np.float32(skin_width)
+    # distance = np.float32(math.sqrt(np.float32(dx * dx) + np.float32(dz * dz)))
+
+    # rock_radius = np.float32(10.0)
+
+    # overlaps = np.float32(distance) < np.float32(rock_radius + enemy_bounds)
+    # # return overlaps
+    
+    # if overlaps:
+    #     planar_dx = guilty_x - rock_x
+    #     planar_dz = guilty_z - rock_z
+    #     planar_distance = math.sqrt(planar_dx**2 + planar_dz**2)
+    #     planar_contact = (planar_distance - (10.0 + guilty_radius)) < 0
+        
+    #     top_dy = (guilty_y + guilty_height) - rock_y
+    #     top_distance = math.sqrt(planar_distance**2 + top_dy**2)
+    
+    #     print("OVERLAP:: PLANAR:", planar_distance, planar_contact, ", TOP DIST:", top_distance)
+    
+    # return overlaps
 
 @njit()
 def simulate_avalanche_rock_hit(seed: int, weakness_active) -> Tuple[bool, int, int]:
@@ -465,6 +526,8 @@ def simulate_avalanche(seed: int, guilty_x, guilty_z, weakness_active=False, deb
     COLLISION_DISABLED = 0
     COLLISION_QUEUED = 1
     COLLISION_PROCESSED = 2
+    
+    # debug=True
     
     # if debug:
     #     print(f"[{seed:08X}] == START ==")
@@ -1294,9 +1357,10 @@ class GuiltyExpectation:
     brian_position: List[float]
 
 AVALANCHE_EXPECTATIONS = [
-    # DamageExpectation(start_seed=0x69905392, final_seed=0x4DC05C3E, hits=4, damage=256, position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z]),
-    # DamageExpectation(start_seed=0x88F5947F, final_seed=0x00134c80, hits=3, damage=199, position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z]),
+    DamageExpectation(start_seed=0x69905392, final_seed=0x4DC05C3E, hits=4, damage=256, position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=False),
+    DamageExpectation(start_seed=0x88F5947F, final_seed=0x00134c80, hits=3, damage=199, position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=False),
     DamageExpectation(start_seed=0x4FB42983, final_seed=0xFE269548, hits=1, damage=92,  position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=True),
+    DamageExpectation(start_seed=0xD8884354, final_seed=0xA7D54EA1, hits=3, damage=198,  position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=False),
 ]
 GUILTY_TURN_EXPECTATIONS = [
     GuiltyExpectation(start_seed=0xCB72A799, final_seed=0x14D0681F, damage=48, position=[0, 0], brian_position=[BRIAN_X, BRIAN_Z]),
@@ -1347,11 +1411,11 @@ def test_avalanche():
 def test():
     # test_rock_1()
     test_avalanche()
-    test_guilty_turn()
+    # test_guilty_turn()
     
 def main():
-    # test()
-    # return
+    test()
+    return
     
     from multiprocessing import Pool
     
