@@ -1,0 +1,32 @@
+CB72A799 -> CB72A799
+turns=23 heals=0 exits=0
+Elapsed: 243.11, Total Sims: 288000
+Decision Code:          11051601011005010011090
+---------------
+Recreating with Brute Force sim...
+CB72A799-> E87E679 0 Barrier    [158, 21] [4, 0] [1800] Distance: 96.50 False
+93B27EA3->93B27EA3 9 Pass       [158, 21] [3, 0] [1800] Distance: 36.13 False
+43C90D32->C67F0C92 0 Barrier    [158, 18] [4, 0] [1800] Distance: 22.21 True
+D8884354->4F1830D9 1 Avalanche  [158, 15] [3, 0] [1472] Distance: 22.21 True
+93E49A03->EEA53C47 1 Avalanche  [158, 12] [2, 0] [1335] Distance: 22.21 True
+4EBE4741-> 84C7A21 0 Barrier    [158, 9] [3, 0] [1335] Distance: 22.21 True
+58A9440B->7DC1A3EB 0 Barrier    [158, 6] [4, 0] [1335] Distance: 22.21 True
+ 94BE745->8DAE04EE 1 Avalanche  [158, 3] [3, 0] [1136] Distance: 22.21 True
+9C6F0350->ECBE69B0 0 Barrier    [158, 0] [3, 0] [1136] Distance: 22.21 True
+ BE776C2-> BE776C2 5 Mana Item  [158, 24] [2, 0] [1136] Distance: 22.21 True
+B2A74E04->AD4A1E64 0 Barrier    [158, 21] [3, 0] [1136] Distance: 22.21 True
+ C4C4156->FB2722B6 0 Barrier    [158, 18] [4, 0] [1136] Distance: 22.21 True
+C4148DD8->1E769ED9 1 Avalanche  [158, 15] [3, 0] [1071] Distance: 22.21 True
+BE6CD803->4B6E93E3 1 Avalanche  [158, 12] [2, 0] [797] Distance: 22.21 True
+2DB7A47D->3405255D 0 Barrier    [158, 9] [4, 0] [797] Distance: 22.21 True
+D9A273E7->6E2AB706 1 Avalanche  [158, 6] [3, 0] [598] Distance: 22.21 True
+2FCFFDA8->87FB7008 0 Barrier    [158, 3] [4, 0] [598] Distance: 22.21 True
+957B3B5A-> 80F9268 6 Melee      [158, 4] [3, 0] [514] Distance: 22.21 True
+E0136EBA->BF8F6610 1 Avalanche  [158, 1] [2, 0] [379] Distance: 22.21 True
+6AA37422->6AA37422 5 Mana Item  [158, 24] [1, 0] [379] Distance: 22.21 True
+39B7AB82->3A7B12E2 0 Barrier    [158, 21] [4, 0] [379] Distance: 22.21 True
+532F5524->3BC79331 1 Avalanche  [158, 18] [3, 0] [179] Distance: 22.21 True
+3CA25A9B->78D4ADAC 1 Avalanche  [158, 15] [2, 0] [-24] Distance: 22.21 True
+CB72A799--------
+bf_success=True bf_turns=23
+Fight success! 23 turns with          11051601011005010011090
