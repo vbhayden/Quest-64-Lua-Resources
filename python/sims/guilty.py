@@ -40,56 +40,8 @@ GUILTY_SIZE_MODIFIER = np.float32(0.056)
 GUILTY_SIZE_RAW = 170
 GUILTY_SIZE = 9.52
 
-AVALANCHE_ROCK_ELEVATIONS = np.array([
-    82.4 - 50.0,
-    82.1 - 50.0,
-    81.5 - 50.0,
-    80.6 - 50.0,
-    79.4 - 50.0,
-    77.9 - 50.0,
-    76.1 - 50.0,
-    74.0 - 50.0,
-    71.6 - 50.0,
-    68.9 - 50.0,
-    65.9 - 50.0,
-    62.6 - 50.0,
-    59.0 - 50.0,
-    55.1 - 50.0,
-    50.9 - 50.0,
-    46.4 - 50.0,
-    41.6 - 50.0,
-    36.5 - 50.0,
-    31.1 - 50.0,
-    25.4 - 50.0,
-    19.4 - 50.0,
-    13.1 - 50.0,
-    06.5 - 50.0,
-    -0.4 - 50.0,
-    -7.6 - 50.0,
-    -15.1 - 50.0,
-    -22.9 - 50.0,
-    -31.0 - 50.0,
-    -39.4 - 50.0,
-    -48.1 - 50.0,
-    -57.1 - 50.0,
-    -66.4 - 50.0,
-    -76.0 - 50.0,
-    -85.9 - 50.0,
-    -96.1 - 50.0,
-    -106.6 - 50.0,
-    -117.4 - 50.0,
-    -128.5 - 50.0,
-    -139.9 - 50.0,
-    -151.6 - 50.0,
-    -163.6 - 50.0,
-    -175.9 - 50.0,
-    -188.5 - 50.0,
-    -201.4 - 50.0,
-    -214.6 - 50.0,
-    -228.1 - 50.0,
-    -241.9 - 50.0,
-    -256.0 - 50.0
-], dtype=np.float32)
+AVALANCHE_ROCK_FALL_SPEED = 0.3
+AVALANCHE_ROCK_INITIAL_HEIGHT = 32.4
 
 SPELL_POWER_AVALANCHE = 460
 SPELL_POWER_ROCK_1 = 290
@@ -415,12 +367,6 @@ def does_capsule_overlap_sphere(c_radius, c_height, cx, cy, cz, s_radius, sx, sy
     if cy <= sy <= cy + c_height:
         return True
     
-    # bottom_dy = cy - sy
-    # bottom_distance = math.sqrt(planar_distance**2 + bottom_dy**2)
-    
-    # if bottom_distance < (s_radius + c_radius + skin_width):
-    #     return True
-
     top_dy = (cy + c_height) - sy
     top_distance = math.sqrt(planar_distance**2 + top_dy**2)
     
@@ -440,49 +386,7 @@ def does_rock_overlap_guilty(rock_x, rock_y, rock_z, guilty_x, guilty_z):
         
     overlaps = does_capsule_overlap_sphere(guilty_radius, guilty_height, guilty_x, guilty_y, guilty_z, 10.0, rock_x, rock_y, rock_z)
     
-    # if overlaps:
-    #     planar_dx = guilty_x - rock_x
-    #     planar_dz = guilty_z - rock_z
-    #     planar_distance = math.sqrt(planar_dx**2 + planar_dz**2)
-    #     planar_contact = (planar_distance - (10.0 + guilty_radius)) < 0
-        
-    #     top_dy = (guilty_y + guilty_height) - rock_y
-    #     top_distance = math.sqrt(planar_distance**2 + top_dy**2)
-    
-    #     # print("OVERLAP:: PLANAR:", planar_distance, planar_contact, ", TOP DIST:", top_distance)
-    
     return overlaps
-    
-    # vertical_aabb_range = GUILTY_POSITION_Y + guilty_height
-    
-    # if rock_y > vertical_aabb_range:
-    #     return False
-    
-    # dx = np.float32(rock_x) - np.float32(guilty_x)
-    # dz = np.float32(rock_z) - np.float32(guilty_z)
-
-    # size = np.float32(GUILTY_SIZE)
-    # skin_width = 0.0
-    # enemy_bounds = np.float32(size) + np.float32(size) * np.float32(skin_width)
-    # distance = np.float32(math.sqrt(np.float32(dx * dx) + np.float32(dz * dz)))
-
-    # rock_radius = np.float32(10.0)
-
-    # overlaps = np.float32(distance) < np.float32(rock_radius + enemy_bounds)
-    # # return overlaps
-    
-    # if overlaps:
-    #     planar_dx = guilty_x - rock_x
-    #     planar_dz = guilty_z - rock_z
-    #     planar_distance = math.sqrt(planar_dx**2 + planar_dz**2)
-    #     planar_contact = (planar_distance - (10.0 + guilty_radius)) < 0
-        
-    #     top_dy = (guilty_y + guilty_height) - rock_y
-    #     top_distance = math.sqrt(planar_distance**2 + top_dy**2)
-    
-    #     print("OVERLAP:: PLANAR:", planar_distance, planar_contact, ", TOP DIST:", top_distance)
-    
-    # return overlaps
 
 @njit()
 def simulate_avalanche_rock_hit(seed: int, weakness_active) -> Tuple[bool, int, int]:
@@ -545,11 +449,7 @@ def simulate_avalanche(seed: int, guilty_x, guilty_z, weakness_active=False, deb
                 
                 movement_frames = frames_active - harmless_duration
                 
-                if movement_frames >= len(AVALANCHE_ROCK_ELEVATIONS):
-                    y = AVALANCHE_ROCK_ELEVATIONS[-1] + BRIAN_Y
-                else:
-                    y = AVALANCHE_ROCK_ELEVATIONS[movement_frames] + BRIAN_Y
-                    
+                y -= AVALANCHE_ROCK_FALL_SPEED * (movement_frames)
                 rock_coords[rock_index] = [x, y, z]
                 
                 # recently_activated = frames_active == harmless_duration
@@ -581,7 +481,7 @@ def simulate_avalanche(seed: int, guilty_x, guilty_z, weakness_active=False, deb
             offset = 20 + offset_roll
 
             rock_x = BRIAN_X - offset * math.sin(angle)
-            rock_y = AVALANCHE_ROCK_ELEVATIONS[0] + BRIAN_Y
+            rock_y = BRIAN_Y + AVALANCHE_ROCK_INITIAL_HEIGHT
             rock_z = BRIAN_Z - offset * math.cos(angle)
             
             rock_coords[rocks_released] = [rock_x, rock_y, rock_z]

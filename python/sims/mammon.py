@@ -9,6 +9,7 @@ from numba import njit, longlong
 from dataclasses import dataclass
 
 BRIAN_X = 78.32734
+BRIAN_Y = 109.8082
 BRIAN_Z = -326.8355
 
 BRIAN_HP = 208
@@ -28,6 +29,7 @@ ELEMENT_WATER = 2
 ELEMENT_WIND = 3
 
 MAMMON_X = -20.16924
+MAMMON_Y = 75.2183
 MAMMON_Z = -349.5814
 
 MAMMON_HP = 2300
@@ -37,6 +39,11 @@ MAMMON_ATTACK = 41
 MAMMON_SIZE_MODIFIER = 0.21
 MAMMON_SIZE_RAW = 450
 MAMMON_SIZE = MAMMON_SIZE_MODIFIER * MAMMON_SIZE_RAW
+MAMMOM_HEIGHT_RAW = 1000
+MAMMON_HEIGHT = MAMMOM_HEIGHT_RAW * MAMMON_SIZE_MODIFIER
+
+AVALANCHE_ROCK_FALL_SPEED = 0.3
+AVALANCHE_ROCK_INITIAL_HEIGHT = 32.4
 
 SPELL_POWER_AVALANCHE = 460
 SPELL_POWER_ROCK_1 = 290
@@ -330,18 +337,37 @@ def calculate_enemy_min_damage(attack_power, spell_power):
     return damage_min
 
 @njit()
-def does_rock_overlap_mammon(rock_x, rock_z):
-    dx = rock_x - MAMMON_X
-    dz = rock_z - MAMMON_Z
+def does_capsule_overlap_sphere(c_radius, c_height, cx, cy, cz, s_radius, sx, sy, sz):
+    planar_dx = cx - sx
+    planar_dz = cz - sz
+    planar_distance = math.sqrt(planar_dx**2 + planar_dz**2)
+    
+    skin_width = 3.5
+    
+    if planar_distance > (s_radius + c_radius):
+        return False
 
-    size = MAMMON_SIZE
-    skin_width = 0
-    enemy_bounds = size + size * skin_width
-    distance = math.sqrt(dx * dx + dz * dz)
+    if cy <= sy <= cy + c_height:
+        return True
+    
+    top_dy = (cy + c_height) - sy
+    top_distance = math.sqrt(planar_distance**2 + top_dy**2)
+    
+    if top_distance < (s_radius + c_radius + skin_width):
+        return True
 
-    rock_radius = 10.0
+    return False
 
-    overlaps = distance <= (rock_radius + enemy_bounds)
+
+@njit()
+def does_rock_overlap_mammon(rock_x, rock_y, rock_z, mammon_x, mammon_z):
+   
+    mammon_radius = MAMMON_SIZE
+    mammon_height = MAMMON_HEIGHT - mammon_radius
+    mammon_y = MAMMON_Y
+        
+    overlaps = does_capsule_overlap_sphere(mammon_radius, mammon_height, mammon_x, mammon_y, mammon_z, 10.0, rock_x, rock_y, rock_z)
+    
     return overlaps
 
 @njit()
@@ -366,7 +392,7 @@ def simulate_avalanche_rock_hit(seed: int, weakness_active) -> Tuple[bool, int, 
     return True, damage, damage_seed
 
 @njit()
-def simulate_avalanche(seed: int, weakness_active=False, debug=False):
+def simulate_avalanche(seed: int, mammon_x, mammon_z, weakness_active=False, debug=False):
     rock_overlaps = 0
     rock_hits = 0
     total_damage = 0
@@ -376,7 +402,7 @@ def simulate_avalanche(seed: int, weakness_active=False, debug=False):
     harmless_duration = 4
     max_rocks = 10
 
-    rock_coords = np.zeros((10, 2), dtype=np.float32)
+    rock_coords = np.zeros((10, 3), dtype=np.float32)
     rock_properties = np.zeros((10, 2), dtype=np.uint8)
     
     rocks_released = 0
@@ -387,13 +413,15 @@ def simulate_avalanche(seed: int, weakness_active=False, debug=False):
     COLLISION_QUEUED = 1
     COLLISION_PROCESSED = 2
     
+    # debug=True
+    
     # if debug:
     #     print(f"[{seed:08X}] == START ==")
 
     for current_frame in range(1, rock_delay * 10 + harmless_duration * 2 + 1):
         for rock_index in range(rocks_released):
 
-            (x, z) = rock_coords[rock_index]
+            (x, y, z) = rock_coords[rock_index]
             (frames_active, collision_state) = rock_properties[rock_index]
 
             collision_enabled = frames_active >= harmless_duration
@@ -401,12 +429,17 @@ def simulate_avalanche(seed: int, weakness_active=False, debug=False):
             
             if rock_can_damage:
                 
-                # recently_activated = rock["frames_active"] == harmless_duration
+                movement_frames = frames_active - harmless_duration
+                
+                y -= AVALANCHE_ROCK_FALL_SPEED * (movement_frames)
+                rock_coords[rock_index] = [x, y, z]
+                
+                # recently_activated = frames_active == harmless_duration
                 # if recently_activated:
                 #     if debug:
-                #         print(f"[{seed:08X}] PRE-COLLISION, Rock {i+1}")
+                #         print(f"[{seed:08X}] PRE-COLLISION, Rock {rock_index}")
                 
-                overlaps_enemy = does_rock_overlap_mammon(x, z)
+                overlaps_enemy = does_rock_overlap_mammon(x, y, z, mammon_x, mammon_z)
                 if overlaps_enemy:
                     rock_properties[rock_index, 1] = COLLISION_QUEUED
                     collisions_observed += 1
@@ -426,13 +459,14 @@ def simulate_avalanche(seed: int, weakness_active=False, debug=False):
 
             seed = angle_seed
 
-            angle = angle_roll * 22.5 * math.pi / 180
+            angle = angle_roll * 22.5 * math.pi / 180.0
             offset = 20 + offset_roll
 
             rock_x = BRIAN_X - offset * math.sin(angle)
+            rock_y = BRIAN_Y + AVALANCHE_ROCK_INITIAL_HEIGHT
             rock_z = BRIAN_Z - offset * math.cos(angle)
             
-            rock_coords[rocks_released] = [rock_x, rock_z]
+            rock_coords[rocks_released] = [rock_x, rock_y, rock_z]
             rocks_released += 1
 
         if collisions_processed < collisions_observed:
@@ -450,8 +484,9 @@ def simulate_avalanche(seed: int, weakness_active=False, debug=False):
                     seed = final_seed
                 
                     # if debug:
-                    #     print(f"[{seed:8X}] POST-COLLISION, Rock {i+1} - {hit}: {damage}")
-                    #     print(f"[{seed:8X}] POST-COLLISION, Rock {i+1} - {rock["x"]:.1f}, {rock["z"]:.1f}")
+                    #     (rock_x, rock_y, rock_z) = rock_coords[rock_index]
+                    #     print(f"[{seed:8X}] POST-COLLISION, Rock {rock_index} - {hit}: {damage}")
+                    #     print(f"[{seed:8X}] POST-COLLISION, Rock {rock_index} - {rock_x:.1f}, {rock_y:.1f}, {rock_z:.1f}")
                         
                     collisions_processed += 1
                     rock_properties[rock_index, 1] = COLLISION_PROCESSED
@@ -597,7 +632,7 @@ def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, mammon_stats
     
     weakness_currently_active = mammon_debuffs[0] > 0
     
-    rock_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, weakness_currently_active)
+    rock_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, MAMMON_X, MAMMON_Z, weakness_currently_active)
     melee_hit, melee_damage, melee_seed = simulate_brian_melee(seed, weakness_currently_active)
     # water_hit, water_damage, water_seed = simulate_water_1(seed, weakness_currently_active)
     # rock_hit, rock_damage, rock_seed = simulate_rock_1(seed, weakness_currently_active)
@@ -750,7 +785,7 @@ def simulate_brian_turn_explicit(seed, decision_code, can_attack, brian_stats, b
     weakness_currently_active = mammon_debuffs[0] > 0
 
     if decision_code == DECISION_AVALANCHE:
-        rock_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, weakness_currently_active)
+        rock_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, MAMMON_X, MAMMON_Z, weakness_currently_active)
         brian_stats[1] -= 3
         mammon_stats[0] -= avalanche_damage
         return avalanche_seed
@@ -1147,7 +1182,7 @@ def test_avalanche():
     print("-- Avalanche Testing --")
     for k, expectation in enumerate(AVALANCHE_EXPECTATIONS):
         print(f"  -- Case {k}:")
-        (sim_hits, sim_damage, sim_seed) = simulate_avalanche(expectation.start_seed, weakness_active=expectation.weakness_active)
+        (sim_hits, sim_damage, sim_seed) = simulate_avalanche(expectation.start_seed, MAMMON_X, MAMMON_Z, weakness_active=expectation.weakness_active)
         
         if (sim_hits, sim_damage, sim_seed) == (expectation.hits, expectation.damage, expectation.final_seed):
             print("    -- passed!")
@@ -1163,6 +1198,8 @@ def test():
     test_mammon_turn()
     
 def main():
+    test()
+    return
     
     from multiprocessing import Pool
     
