@@ -2,11 +2,20 @@ local MEM_PROJECTILE_ONE_X = 0x086F24
 local MEM_PROJECTILE_ONE_Y = 0x086F28
 local MEM_PROJECTILE_ONE_Z = 0x086F2C
 
+local MEM_PROJECTILE_FOUR_X = 0x086FD8
+local MEM_PROJECTILE_FOUR_Y = 0x086FDC
+local MEM_PROJECTILE_FOUR_Z = 0x086FE0
 
-local required_accuracy = 0.00001
-local save_slots = { 5, 6, 7 }
+ local MEM_BOSS_HEALTH_CURRENT = 0x07C9A2
+
+local required_accuracy = 0.001
+local save_slots = { 5 }
 local scoot_distances = { 0.2, 0.1, 0.1 }
 local frame_duration = 600
+
+local function GetBossHP()
+    return memory.read_u16_be(MEM_BOSS_HEALTH_CURRENT, "RDRAM")
+end
 
 local function GetRNG()
     return memory.read_u32_be(0x04D748, "RDRAM")
