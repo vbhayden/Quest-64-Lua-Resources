@@ -728,6 +728,8 @@ local function DoesRockOverlapEnemy(index, rock_x, rock_y, rock_z, enemyInfo)
     local radial_sum = 10.0 + collision_radius
     local elliptical_distance = math.sqrt(dx*dx + dy*dy + dz*dz)
 
+    -- console.log(string.format("Radial: %.4f, Distance: %.4f", radial_sum, elliptical_distance))
+
     return radial_sum > elliptical_distance
 end
 
@@ -777,7 +779,7 @@ local function SimulateCastAvalanche()
             local rock_can_damage = collision_enabled and not rock.already_collided
             if rock_can_damage then
 
-                local falling_frames = rock.frames_active - harmless_duration
+                local falling_frames = rock.frames_active - harmless_duration + 1
                 rock.y = rock.y - AVALANCHE_ROCK_FALLING_SPEED * falling_frames
 
                 local recently_activated = rock.frames_active == harmless_duration
@@ -794,6 +796,10 @@ local function SimulateCastAvalanche()
             end
 
             rock.frames_active = rock.frames_active + 1
+            
+            -- if i == 1 and print_now then
+            --     console.log(string.format("[%s] %.4f, %.4f %.4f", HexPadLeft(seed), rock.x, rock.y, rock.z))
+            -- end
         end
         
         local allow_more_rocks = #active_rocks < max_rocks
@@ -826,7 +832,7 @@ local function SimulateCastAvalanche()
             local rock_z = brianInfo.z - offset * math.cos(angle)
             
             if print_now then
-                console.log(string.format("[%s] %d: %.2f, %.2f %.2f", HexPadLeft(seed), #active_rocks+1, rock_x, rock_y, rock_z))
+                console.log(string.format("[%s] %d: %.4f, %.4f %.4f", HexPadLeft(seed), #active_rocks+1, rock_x, rock_y, rock_z))
 
                 -- if current_frame == 1 then
                 --     local perfect_brian_x = enemyInfo.x - (rock_x - brianInfo.x)
@@ -863,7 +869,7 @@ local function SimulateCastAvalanche()
 
                 if print_now then
                     console.log(string.format("[%s] POST-COLLISION, Rock %d - %s", HexPadLeft(seed), rock.index, Ternary(hit, "HIT: " .. damage, "MISS")))
-                    console.log(string.format("[%s] POST-COLLISION, Rock %d - %.2f, %.2f, %.2f", HexPadLeft(seed), rock.index, rock.x, rock.y, rock.z))
+                    console.log(string.format("[%s] POST-COLLISION, Rock %d - %.4f, %.4f, %.4f", HexPadLeft(seed), rock.index, rock.x, rock.y, rock.z))
                 end
             end
 
@@ -933,6 +939,12 @@ end
 -- print_now = true
 -- SimulateCastAvalanche()
 
+-- exit()
+
+-- local enemy_info = GetEnemyAtIndex(1)
+-- local overlaps = DoesRockOverlapEnemy(1, 22.7866, 23.7513, 15.4733, enemy_info)
+
+-- console.log(Ternary(overlaps, "TRUE", "FALSE"))
 -- exit()
 
 while true do
@@ -1008,3 +1020,5 @@ while true do
 
     emu.frameadvance()
 end
+
+
