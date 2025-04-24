@@ -38,7 +38,8 @@ GUILTY_AGILITY = 120
 GUILTY_ATTACK = 34
 GUILTY_SIZE_MODIFIER = np.float32(0.056)
 GUILTY_SIZE_RAW = 170
-GUILTY_SIZE = 9.52
+GUILTY_COLLISION_RADIUS = 9.52
+GUILTY_COLLISION_HEIGHT = 24.64
 
 AVALANCHE_ROCK_FALL_SPEED = 0.3
 AVALANCHE_ROCK_INITIAL_HEIGHT = 32.4
@@ -354,39 +355,24 @@ def calculate_enemy_min_damage(attack_power, spell_power) -> int:
     return damage_min
 
 @njit()
-def does_capsule_overlap_sphere(c_radius, c_height, cx, cy, cz, s_radius, sx, sy, sz):
-    planar_dx = cx - sx
-    planar_dz = cz - sz
-    planar_distance = math.sqrt(planar_dx**2 + planar_dz**2)
-    
-    skin_width = 3.5
-    
-    if planar_distance > (s_radius + c_radius):
-        return False
-
-    if cy <= sy <= cy + c_height:
-        return True
-    
-    top_dy = (cy + c_height) - sy
-    top_distance = math.sqrt(planar_distance**2 + top_dy**2)
-    
-    if top_distance < (s_radius + c_radius + skin_width):
-        return True
-
-    return False
-
-
-@njit()
 def does_rock_overlap_guilty(rock_x, rock_y, rock_z, guilty_x, guilty_z):
    
-    guilty_radius = 9.52
-    guilty_height = np.float32(24.64) - guilty_radius
+    cx = guilty_x
+    cy = 50.0
+    cz = guilty_z
     
-    guilty_y = 50.0
-        
-    overlaps = does_capsule_overlap_sphere(guilty_radius, guilty_height, guilty_x, guilty_y, guilty_z, 10.0, rock_x, rock_y, rock_z)
+    collision_radius = GUILTY_COLLISION_RADIUS
+    collision_height = GUILTY_COLLISION_HEIGHT
+
+    dx = cx - rock_x
+    dz = cz - rock_z
     
-    return overlaps
+    dy = (cy + collision_height * 0.5 - rock_y) * 0.5
+
+    radial_sum = 10.0 + collision_radius
+    elliptical_distance = math.sqrt(dx*dx + dy*dy + dz*dz)
+
+    return radial_sum > elliptical_distance
 
 @njit()
 def simulate_avalanche_rock_hit(seed: int, weakness_active) -> Tuple[bool, int, int]:
@@ -610,24 +596,24 @@ def simulate_brian_melee(seed, weakness_active=False):
         return False, 0, agility_seed
 
     total_elements = TOTAL_ELEMENTS
-    influence = math.floor(total_elements * 1.5)
+    power = math.floor(total_elements * 1.5)
     
-    reduction_threshold = total_elements >> 2
-    attack_reduction = 0
+    balance_cutoff = total_elements >> 2
+    penalty = 0
+    
+    if BRIAN_FIRE > balance_cutoff:
+        penalty += BRIAN_FIRE - balance_cutoff
+    
+    if BRIAN_EARTH > balance_cutoff:
+        penalty += BRIAN_EARTH - balance_cutoff
+    
+    if BRIAN_WATER > balance_cutoff:
+        penalty += BRIAN_WATER - balance_cutoff
+    
+    if BRIAN_WIND > balance_cutoff:
+        penalty += BRIAN_WIND - balance_cutoff
 
-    if ELEMENT_FIRE > reduction_threshold:
-        attack_reduction += ELEMENT_FIRE - reduction_threshold
-    
-    if ELEMENT_EARTH > reduction_threshold:
-        attack_reduction += ELEMENT_EARTH - reduction_threshold
-    
-    if ELEMENT_WATER > reduction_threshold:
-        attack_reduction += ELEMENT_WATER - reduction_threshold
-    
-    if ELEMENT_WIND > reduction_threshold:
-        attack_reduction += ELEMENT_WIND - reduction_threshold
-
-    spirit_influence = influence - attack_reduction
+    spirit_influence = power - penalty
     attack_power = (spirit_influence * BRIAN_STAFF_POWER) >> 4
     enemy_defense = GUILTY_DEFENSE
     if weakness_active:
@@ -1179,7 +1165,7 @@ def sim_GUILTY_brute_force(seed: int, decision_codes_hi: np.longlong, decision_c
         iter_seed = simulate_brian_turn_explicit(combat_seed, decision_code, can_attack, brian_stats, brian_buffs, guilty_stats, guilty_debuffs, guilty_position)
         
         distance_to_brian = get_collision_distance_to_brian(brian_position[0], brian_position[1], guilty_position[0], guilty_position[1])
-        print(f"{combat_seed:8X}->{iter_seed:8X}", decision_code, f"{get_decision_text(decision_code):10}", brian_stats, brian_buffs, guilty_stats, "Distance:", f"{distance_to_brian:.2f}", can_attack)
+        print(f"{combat_seed:8X}->{iter_seed:8X}", decision_code, f"{get_decision_text(decision_code):10}", brian_stats, brian_buffs, guilty_stats, guilty_debuffs, "Dist:", f"{distance_to_brian:.2f}")
         
         if guilty_stats[0] <= 0:
             return True, turns + 1, (decision_codes_hi, decision_codes_lo)
@@ -1244,8 +1230,8 @@ class DamageExpectation:
     final_seed: int
     hits: int
     damage: int
-    position: List[float]
-    brian_position: List[float]
+    position: List[float] = None
+    brian_position: List[float] = None
     weakness_active: bool = False
     
 @dataclass
@@ -1267,6 +1253,9 @@ GUILTY_TURN_EXPECTATIONS = [
     GuiltyExpectation(start_seed=0x14D0681F, final_seed=0x40D9AE15, damage=96, position=[GUILTY_SPOT_MID_X, GUILTY_SPOT_MID_Z], brian_position=[BRIAN_X, BRIAN_Z]),
     GuiltyExpectation(start_seed=0x00000000, final_seed=0x1F7301BF, damage=48, position=[GUILTY_SPOT_MID_X, GUILTY_SPOT_MID_Z], brian_position=[BRIAN_X, BRIAN_Z]),
     GuiltyExpectation(start_seed=0x7ECE651E, final_seed=0x9120F02C, damage=47, position=[0,0], brian_position=[BRIAN_X, BRIAN_Z]),
+]
+MELEE_EXPECTATIONS = [
+    DamageExpectation(start_seed=0xB060F4B8, final_seed=0xCB4725F6, hits=1, damage=47)
 ]
 
 def test_guilty_turn():
@@ -1308,9 +1297,29 @@ def test_avalanche():
             print(f"     -- Damage: {sim_damage}, expected {expectation.damage}")
             print(f"     -- Seed: {sim_seed:8X}, expected {expectation.final_seed:8X}")
 
+def test_melee():
+    print("-- Melee Testing --")
+    for k, expectation in enumerate(MELEE_EXPECTATIONS):
+        print(f"  -- Case {k}:")
+        sim_hit, sim_damage, sim_seed = simulate_brian_melee(
+            seed=expectation.start_seed, 
+            weakness_active=expectation.weakness_active
+        )
+        
+        sim_hits = 1 if sim_hit else 0
+        
+        if (sim_hits, sim_damage, sim_seed) == (expectation.hits, expectation.damage, expectation.final_seed):
+            print("    -- passed!")
+        else:
+            print("    -- Failed!")
+            print(f"     -- Hits: {sim_hits}, expected {expectation.hits}")
+            print(f"     -- Damage: {sim_damage}, expected {expectation.damage}")
+            print(f"     -- Seed: {sim_seed:8X}, expected {expectation.final_seed:8X}")
+
 def test():
     # test_rock_1()
-    test_avalanche()
+    # test_avalanche()
+    test_melee()
     # test_guilty_turn()
     
 def main():

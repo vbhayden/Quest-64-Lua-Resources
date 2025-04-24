@@ -1217,7 +1217,7 @@ def main():
     
     heal_range = 13
     exit_range = 13
-    sim_count = 1000
+    sim_count = 100
     max_turns = 12
     
     # (heals, exits, turns, decisions) = run_sim(seed, sim_count, heal_range, exit_range, max_turns=16)
