@@ -7,6 +7,7 @@ MEM_ENCOUNTER_STEP_DISTANCE = 0x8C574
 MEM_ENCOUNTER_ACCUMULATION = 0x8C578
 
 MEM_BRIAN_POSITION_X = 0x7BACC
+MEM_BRIAN_POSITION_Y = 0x7BAD0
 MEM_BRIAN_POSITION_Z = 0x7BAD4
 MEM_BRIAN_ROTATION_Y = 0x7BADC
 
@@ -42,6 +43,9 @@ SPELL_POWER_ROCK_1 = 290
 
 GUI_CHAR_WIDTH = 10
 GUI_PADDING_RIGHT = 240 + 60
+
+local AVALANCHE_ROCK_INITIAL_HEIGHT = 32.4
+local AVALANCHE_ROCK_FALLING_SPEED = 0.3
 
 BONUS_TABLE = {
     0.0240, -- Level 1,  Bonus Percent: 2.4%,
@@ -120,6 +124,15 @@ local function Ternary ( cond , T , F )
     if cond then return T else return F end
 end
 
+local function TrimPointer(address)
+    return bit.band(address, 0x00FFFFFF)
+end
+
+local function GetPointerFromAddress(address)
+    local ptr = memory.read_u32_be(address, "RDRAM")
+    return TrimPointer(ptr)
+end
+
 local function BitwiseAnd(a, b)
     local result = 0
     local bitval = 1
@@ -188,9 +201,10 @@ end
 
 local function GetBrianLocation()
     local brianX = memory.readfloat(MEM_BRIAN_POSITION_X, true, "RDRAM")
+    local brianY = memory.readfloat(MEM_BRIAN_POSITION_Y, true, "RDRAM")
     local brianZ = memory.readfloat(MEM_BRIAN_POSITION_Z, true, "RDRAM")
     
-    return brianX, brianZ
+    return brianX, brianY, brianZ
 end
 
 local function SetBrianLocation(x, z)
@@ -224,6 +238,10 @@ local function GetEnemyAtIndex(index)
 
     local indexOffset = 296 * (index - 1)
 
+    local x = memory.readfloat(0x7C9BC + indexOffset, true, "RDRAM")
+    local y = memory.readfloat(0x7C9C0 + indexOffset, true, "RDRAM")
+    local z = memory.readfloat(0x7C9C4 + indexOffset, true, "RDRAM")
+
     local id = memory.readbyte(0x07CA0D + indexOffset, "RDRAM")
 
     local hp = memory.read_u16_be(0x07C9A2 + indexOffset, "RDRAM")
@@ -233,17 +251,24 @@ local function GetEnemyAtIndex(index)
     local agility = memory.read_u16_be(0x07CAAE + indexOffset, "RDRAM")
     local defense = memory.read_u16_be(0x07CAB0 + indexOffset, "RDRAM")
     
-    local x = memory.readfloat(0x7C9BC + indexOffset, true, "RDRAM")
-    local y = memory.readfloat(0x7C9C0 + indexOffset, true, "RDRAM")
-    local z = memory.readfloat(0x7C9C4 + indexOffset, true, "RDRAM")
-    
-    local sizeModifier = memory.readfloat(0x7C9E0, true, "RDRAM")
-    local rawSize = memory.readfloat(0x7C9E4, true, "RDRAM")
+    local sizeModifier = memory.readfloat(0x7C9E0 + indexOffset, true, "RDRAM")
+    local rawSize = memory.readfloat(0x7C9E4 + indexOffset, true, "RDRAM")
     local size = sizeModifier * rawSize
+
+    local ptr_attributes = GetPointerFromAddress(0x07CA20 + indexOffset)
+    local rawHeight = memory.readfloat(ptr_attributes + 0x1C, true, "RDRAM")
+    local height = rawHeight * sizeModifier
+
+    local enemy_type = memory.read_u16_be(ptr_attributes + 0x0, "RDRAM")
+
+    local strange_data = GetPointerFromAddress(0x07CA24 + indexOffset)
+    local flying_y = memory.readfloat(ptr_attributes + 0x94, true, "RDRAM")
 
     local weaknessTurns = memory.readbyte(0x07CA34, "RDRAM")
 
     return {
+        enemy_type = enemy_type,
+        flying_y = flying_y,
         id = id,
         hp = hp,
         hpMax = hpMax,
@@ -254,6 +279,7 @@ local function GetEnemyAtIndex(index)
         y = y,
         z = z,
         size = size,
+        height = height,
         rawSize = rawSize,
         weaknessTurns = weaknessTurns
     }
@@ -264,7 +290,7 @@ local function GetBrianCombatInfo()
     local combatAgi = memory.read_u16_be(0x07BBBE, "RDRAM")
     local combatDef = memory.read_u16_be(0x07BBC0, "RDRAM")
 
-    local bx, bz = GetBrianLocation()
+    local bx, by, bz = GetBrianLocation()
     local angle = GetBrianDirection()
 
     local fire = memory.readbyte(MEM_ELEMENT_FIRE, "RDRAM")
@@ -281,6 +307,7 @@ local function GetBrianCombatInfo()
         agi = combatAgi,
         def = combatDef,
         x = bx,
+        y = by,
         z = bz,
         fire = fire,
         earth = earth,
@@ -672,21 +699,38 @@ end
 
 local print_now = true
 
-local function DoesRockOverlapEnemy(index, rock_x, rock_z, enemyInfo)
+local function DoesRockOverlapEnemy(index, rock_x, rock_y, rock_z, enemyInfo)
     
-    local dx = rock_x - enemyInfo.x
-    local dz = rock_z - enemyInfo.z
+    local cx = enemyInfo.x
+    local cy = enemyInfo.y
+    local cz = enemyInfo.z
+    local collision_radius = enemyInfo.size
+    local collision_height = enemyInfo.height
 
-    local size = enemyInfo.size
-    local skin_width = 0
-    local enemy_bounds = size + size * skin_width
-    local distance = math.sqrt(dx * dx + dz * dz)
+    local dx = cx - rock_x
+    local dz = cz - rock_z
 
-    local rock_radius = 10.0
-    local rock_bounds = rock_radius
+    local dy = 0.0
 
-    local overlaps = distance <= rock_bounds + enemy_bounds
-    return overlaps
+    if enemyInfo.enemy_type ~= 0 then
+        if enemyInfo.enemy_type ~= 1 then
+            -- Mammon
+            dy = 0
+        else
+            -- Flying Enemy
+            dy = (enemyInfo.flying_y - rock_y) * 0.5
+        end
+    else
+        -- Normal Enemy
+        dy = (cy + collision_height * 0.5 - rock_y) * 0.5
+    end
+
+    local radial_sum = 10.0 + collision_radius
+    local elliptical_distance = math.sqrt(dx*dx + dy*dy + dz*dz)
+
+    -- console.log(string.format("Radial: %.4f, Distance: %.4f", radial_sum, elliptical_distance))
+
+    return radial_sum > elliptical_distance
 end
 
 local function HexPadLeft(hex)
@@ -735,6 +779,9 @@ local function SimulateCastAvalanche()
             local rock_can_damage = collision_enabled and not rock.already_collided
             if rock_can_damage then
 
+                local falling_frames = rock.frames_active - harmless_duration + 1
+                rock.y = rock.y - AVALANCHE_ROCK_FALLING_SPEED * falling_frames
+
                 local recently_activated = rock.frames_active == harmless_duration
                 if recently_activated then
                     if print_now then
@@ -742,13 +789,17 @@ local function SimulateCastAvalanche()
                     end
                 end
 
-                local overlaps_enemy = DoesRockOverlapEnemy(i, rock.x, rock.z, enemyInfo)
+                local overlaps_enemy = DoesRockOverlapEnemy(i, rock.x, rock.y, rock.z, enemyInfo)
                 if overlaps_enemy then
                     collision_queue[#collision_queue+1] = rock
                 end
             end
 
             rock.frames_active = rock.frames_active + 1
+            
+            -- if i == 1 and print_now then
+            --     console.log(string.format("[%s] %.4f, %.4f %.4f", HexPadLeft(seed), rock.x, rock.y, rock.z))
+            -- end
         end
         
         local allow_more_rocks = #active_rocks < max_rocks
@@ -764,7 +815,7 @@ local function SimulateCastAvalanche()
             seed = angleSeed
 
             local angle = angleRoll * 22.5 * math.pi / 180
-            local offset = 20 + offsetRoll
+            local offset = 20.0 + offsetRoll
 
             -- Angle Notes
             --
@@ -777,10 +828,11 @@ local function SimulateCastAvalanche()
             -- that would make sense is if these angles were also for world space.
             
             local rock_x = brianInfo.x - offset * math.sin(angle)
+            local rock_y = brianInfo.y + AVALANCHE_ROCK_INITIAL_HEIGHT
             local rock_z = brianInfo.z - offset * math.cos(angle)
             
             if print_now then
-                console.log(string.format("[%s] %d: %f, %f", HexPadLeft(seed), #active_rocks+1, rock_x, rock_z))
+                console.log(string.format("[%s] %d: %.4f, %.4f %.4f", HexPadLeft(seed), #active_rocks+1, rock_x, rock_y, rock_z))
 
                 -- if current_frame == 1 then
                 --     local perfect_brian_x = enemyInfo.x - (rock_x - brianInfo.x)
@@ -794,6 +846,7 @@ local function SimulateCastAvalanche()
                 frames_active = 0,
                 already_collided = false,
                 x = rock_x,
+                y = rock_y,
                 z = rock_z,
                 index = #active_rocks + 1
             }
@@ -816,7 +869,7 @@ local function SimulateCastAvalanche()
 
                 if print_now then
                     console.log(string.format("[%s] POST-COLLISION, Rock %d - %s", HexPadLeft(seed), rock.index, Ternary(hit, "HIT: " .. damage, "MISS")))
-                    console.log(string.format("[%s] POST-COLLISION, Rock %d - %f, %f", HexPadLeft(seed), rock.index, rock.x, rock.z))
+                    console.log(string.format("[%s] POST-COLLISION, Rock %d - %.4f, %.4f, %.4f", HexPadLeft(seed), rock.index, rock.x, rock.y, rock.z))
                 end
             end
 
@@ -877,8 +930,22 @@ local function DrawMissPredictionRow(index, name, missPredicted)
     GuiTextRightWithColor(index, string.format("%s - %s", miss_icon, name), row_color)
 end
 
-print_now = true
-SimulateCastAvalanche()
+-- local enemyInfo = GetEnemyAtIndex(1)
+-- console.clear()
+-- console.log(enemyInfo)
+
+-- exit()
+
+-- print_now = true
+-- SimulateCastAvalanche()
+
+-- exit()
+
+-- local enemy_info = GetEnemyAtIndex(1)
+-- local overlaps = DoesRockOverlapEnemy(1, 22.7866, 23.7513, 15.4733, enemy_info)
+
+-- console.log(Ternary(overlaps, "TRUE", "FALSE"))
+-- exit()
 
 while true do
 
@@ -953,3 +1020,5 @@ while true do
 
     emu.frameadvance()
 end
+
+

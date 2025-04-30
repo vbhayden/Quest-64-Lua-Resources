@@ -1,0 +1,31 @@
+CB72A799 -> 8FECB9FD
+turns=22 heals=9 exits=4
+Elapsed: 19.86, Total Sims: 14400
+Decision Code:           151011 120506101606102
+---------------
+Recreating with Brute Force sim...
+8FECB9FD->52C7ED23 2 Weakness 2 [158, 21] [0, 0] [1800] Distance: 96.50 False
+13A3C6B9->3D771599 0 Barrier    [112, 18] [4, 0] [1800] Distance: 36.13 False
+3B7C0D40->B4888359 1 Avalanche  [112, 15] [3, 0] [1537] Distance: 22.21 True
+C6F84883->F436A239 6 Melee      [112, 16] [2, 0] [1431] Distance: 22.21 True
+357C4463->17EBB043 0 Barrier    [112, 13] [4, 0] [1431] Distance: 22.21 True
+F00AC1DD->E8BE8C23 6 Melee      [112, 14] [3, 0] [1348] Distance: 22.21 True
+ 57272BD->365EB186 1 Avalanche  [112, 11] [2, 0] [1151] Distance: 22.21 True
+78591428->55D1C688 0 Barrier    [112, 8] [4, 0] [1151] Distance: 22.21 True
+C1DE4DDA->6F323773 1 Avalanche  [112, 5] [3, 0] [1081] Distance: 22.21 True
+63BFE18D->C0786B53 6 Melee      [112, 6] [2, 0] [998] Distance: 22.21 True
+BBD12A6D->2E78634D 0 Barrier    [112, 3] [3, 0] [998] Distance: 22.21 True
+CF9F9C57->CF9F9C57 5 Mana Item  [112, 24] [2, 0] [998] Distance: 22.21 True
+94B10CD1->EEF147B1 0 Barrier    [112, 21] [4, 0] [998] Distance: 22.21 True
+7C551B1B->948E8D71 2 Weakness 2 [112, 18] [3, 0] [998] Distance: 22.21 True
+EFA8DADB->87EA34EC 1 Avalanche  [112, 15] [2, 0] [739] Distance: 22.21 True
+9CA6C69E->D61DEBFE 0 Barrier    [112, 12] [4, 0] [739] Distance: 22.21 True
+EC77B7E0->2578327D 1 Avalanche  [112, 9] [3, 0] [537] Distance: 22.21 True
+ 1EEC407->4CBE400B 1 Avalanche  [112, 6] [2, 0] [399] Distance: 22.21 True
+D454EE65->B2BD8345 0 Barrier    [112, 3] [4, 0] [399] Distance: 22.21 True
+7514098F->D1973E4E 1 Avalanche  [112, 0] [3, 0] [199] Distance: 22.21 True
+BAB635B0->BAB635B0 5 Mana Item  [112, 24] [2, 0] [199] Distance: 22.21 True
+571562C2->765ED617 1 Avalanche  [112, 21] [1, 0] [-1] Distance: 22.21 True
+8FECB9FD--------
+bf_success=True bf_turns=22
+Fight success! 22 turns with           151011 120506101606102
