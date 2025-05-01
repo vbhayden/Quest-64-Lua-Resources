@@ -744,9 +744,9 @@ local function HexPadLeft(hex)
     return string.rep("0", extras) .. str
 end
 
-local function SimulateCastAvalanche()
+local function SimulateCastAvalanche(brianInfo)
 
-    local brianInfo = GetBrianCombatInfo()
+    -- local brianInfo = GetBrianCombatInfo()
     local enemyInfo = GetEnemyAtIndex(1)
 
     local seed = GetCurrentRNG()
@@ -947,6 +947,91 @@ end
 -- console.log(Ternary(overlaps, "TRUE", "FALSE"))
 -- exit()
 
+local function CheckAvalancheVolatility(expected_damage, expected_seed)
+
+    local brian_info = GetBrianCombatInfo()
+    local safety_result = "UNSAFE"
+    local safety_distance = 0
+    local volatility_results = {
+        {
+            distance = 1.0,
+            result = "VOLATILE"
+        },
+        {
+            distance = 2.0,
+            result = "MODERATE"
+        },
+        {
+            distance = 5.0,
+            result = "SAFE"
+        },
+        {
+            distance = 10.0,
+            result = "VERY SAFE"
+        }
+    }
+
+    local distance_signs = {
+        {
+            x = 1,
+            z = 0
+        },
+        {
+            x = -1,
+            z = 0
+        },
+        {
+            x = 0,
+            z = -1
+        },
+        {
+            x = 0,
+            z = 1
+        },
+        {
+            x = 1,
+            z = 1
+        },
+        {
+            x = -1,
+            z = 1
+        },
+        {
+            x = 1,
+            z = -1
+        },
+        {
+            x = -1,
+            z = -1
+        }
+    }
+
+    local still_safe = true
+
+    for _, result in pairs(volatility_results) do
+        for __, signs in pairs(distance_signs) do
+            if still_safe then
+                local brian_x = brian_info.x + result.distance * signs.x
+                local brian_z = brian_info.z + result.distance * signs.z
+                brian_info.x = brian_x
+                brian_info.z = brian_z
+                local _, __, damage, seed = SimulateCastAvalanche(brian_info)
+
+                if (damage ~= expected_damage) or (seed ~= expected_seed) then
+                    still_safe = false
+                end
+            end
+        end
+
+        if still_safe then
+            safety_result = result.result
+            safety_distance = result.distance
+        end
+    end
+
+    return safety_result, safety_distance
+end
+
 while true do
 
     local combatActive = IsCombatActive()
@@ -966,8 +1051,10 @@ while true do
     local barrierHit, barrierRoll, barrierTurns, barrierSeed = SimulateCastBarrier()
     local drainHit, drainAccuracyRoll, drainAgilityRoll, drainSeed = SimulateCastDrainMagic()
     local weaknessHit, weaknessRoll, weaknessTurns, weaknessSeed = SimulateCastWeakness()
-    local rockOverlaps, rockHits, avalancheDamage, avalancheSeed = SimulateCastAvalanche()
+    local rockOverlaps, rockHits, avalancheDamage, avalancheSeed = SimulateCastAvalanche(brianInfo)
     local rockHit, rockDamage, rockSeed = SimulateRockOneCast()
+
+    local avalanche_safety, avalanche_safety_distance = CheckAvalancheVolatility(avalancheDamage, avalancheSeed)
 
     local DrawHandler = Ternary(briansTurn, DrawSpellRow, DrawInactiveSpellRow)
     local DrawDamageHandler = Ternary(briansTurn, DrawGenericDamageSpellRow, DrawInactiveSpellRow)
@@ -993,6 +1080,11 @@ while true do
         DrawMissPredictionRow(16, "Rock One", not hitsAfterRockOne)
         DrawMissPredictionRow(17, "Melee", not hitsAfterMelee)
     end
+    
+    GuiTextRightWithColor(20, "Avalanche Reliability:")
+    GuiTextRightWithColor(21, "--------------------------")
+    GuiTextRightWithColor(22, "Safety:   " .. avalanche_safety)
+    GuiTextRightWithColor(23, "Distance: " .. string.format("%.2f", avalanche_safety_distance))
 
     DrawSpellRow(4, "Magic Barrier", barrierHit, barrierTurns, bodyColor)
     DrawHandler(5, "Drain Magic", drainHit, 0, bodyColor)

@@ -4,20 +4,60 @@ import seaborn as sns
 import numpy as np
 import statistics
 import json
+import glob
 import os.path
 import math
+import re
 
 import numpy.typing
 
+from numba import njit
 from PIL import Image
 from typing import List, Tuple, Dict
 from dataclasses import dataclass
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
+ENCOUNTER_AREAS = {
+    (2, 0): "Holy Plains",
+    (31, 0): "Connor Forest",
+    (3, 0): "Dondoran Flats",
+    (32, 0): "Glencoe Forest",
+    (5, 0): "West Carmaugh",
+    (27, 0): "Cull Hazard",
+    (33, 0): "Windward Forest",
+    (26, 0): "Blue Cave",
+    (12, 0): "Isle of Skye",
+    (7, 0): "East Limelin",
+    (28, 0): "Baragoon Tunnel",
+    (9, 0): "Dindom Dries",
+    (29, 0): "Boil Hole",
+    (11, 2): "Baragoon Moor",
+    (11, 1): "Brannoch Courtyard",
+    (30, 0): "Brannoch Castle 1F",
+    (30, 1): "Brannoch Castle 2F",
+    (30, 2): "Brannoch Castle 3F",
+    (30, 3): "Brannoch Castle 4F",
+    (30, 4): "Brannoch Castle 5F",
+    (30, 5): "Brannoch Castle 6F",
+    (34, 0): "Mammon's World 1",
+    (34, 7): "Mammon's World 2",
+    (34, 4): "Mammon's World 3",
+    (34, 2): "Mammon's World 4",
+    (34, 5): "Mammon's World 5",
+    (34, 8): "Mammon's World 6",
+}
+
+@njit
 def sqr_distance(x1, z1, x2, z2):
     dx = x1 - x2
     dz = z1 - z2
     return dx * dx + dz * dz
+
+@njit
+def distance(x1, z1, x2, z2):
+    dx = x1 - x2
+    dz = z1 - z2
+    return math.sqrt(dx * dx + dz * dz)
 
 class MapData:
     walls: List[List[Dict]]
@@ -26,12 +66,12 @@ class MapData:
     spirits: List[Dict]
     chests: List[Dict]
     path: str
+    density_data: str = ""
 
     @classmethod
     def load_from_path(cls, full_path) -> 'MapData':
         with open(full_path) as fp:
             map_json = json.load(fp)
-            
             map_data = MapData()
             
             map_data.walls   = map_json["walls"]
@@ -57,7 +97,7 @@ class MapData:
     def get_density_image_data(self) -> numpy.typing.NDArray:
         
         (x, z, width, depth) = self.get_bounds()
-        data = np.ndarray((width, depth, 4))
+        data = np.zeros((width, depth), dtype=np.uint32)
         
         for ix in range(x, x + width + 1, 1):
             
@@ -65,48 +105,177 @@ class MapData:
                 print(ix, "of", x+width)
             
             for iz in range(z, z + depth + 1, 1):
-                
-                # print(ix-x, ix, iz-z, iz)
-                data[ix-x-1, iz-z-1] = self.sample_for_encounters(ix, iz)    
+                data[ix-x-1, iz-z-1] = self.sample_for_encounters(ix, iz)  
         
         return data
-
+        
     def sample_for_encounters(self, x, z) -> Tuple[float]:
         
-        max_dist_sqr = 0
-        min_dist_sqr = 10000
+        max_dist = 0
+        min_dist = 10000
         
-        valid_sqr_dists = []
+        valid_count = 0
+        # valid_dists = np.array([0, 0, 0, 0, 0])
         
         for circle in self.circles:
             cx, cz = circle["x"], circle["z"]
-            dist_sqr = sqr_distance(x, z, cx, cz)
             
-            if dist_sqr < 2500:
-                continue
-            if dist_sqr > 8100:
+            dx = cx - x
+            if dx*dx > 8100:
                 continue
             
-            if dist_sqr < min_dist_sqr:
-                min_dist_sqr = dist_sqr
+            dz = cz - z
+            if dz*dz > 8100:
+                continue
+            
+            sqr_circle_dist = dx*dx + dz*dz
+            
+            if sqr_circle_dist < 2500:
+                continue
+            if sqr_circle_dist > 8100:
+                continue
+            
+            circle_dist = math.sqrt(sqr_circle_dist)
+            
+            if circle_dist < min_dist:
+                min_dist = int(circle_dist)
                 
-            if dist_sqr > max_dist_sqr:
-                max_dist_sqr = dist_sqr
+            if circle_dist > max_dist:
+                max_dist = int(circle_dist)
                 
-            valid_sqr_dists.append(dist_sqr)
+            # valid_dists[valid_count] = circle_dist
+            valid_count += 1
+            
+            if valid_count >= 5:
+                break
         
-        if len(valid_sqr_dists) == 0:
-            return (0, 0, 0, 0)
+        if valid_count == 0:
+            return 0xFFFFFFFF
         
-        mean_dist_sqr = sum(valid_sqr_dists) / len(valid_sqr_dists)
-        median_dist_sqr = statistics.median(valid_sqr_dists)
+        # avg_dist = sum(valid_dists[:valid_count]) // valid_count
+        # median_dist = int(statistics.median(valid_dists[:valid_count]))
         
-        max_dist = math.sqrt(max_dist_sqr)
-        min_dist = math.sqrt(min_dist_sqr)
-        mean_dist = math.sqrt(mean_dist_sqr)
-        median_dist = math.sqrt(median_dist_sqr)
+        a = (max_dist & 0xFF) << 24
+        b = (min_dist & 0xFF) << 16
+        # c = (avg_dist & 0xFF) << 8
+        # d = (median_dist & 0xFF)
         
-        return (max_dist, min_dist, mean_dist, median_dist)
+        # return a + b + c + d
+        return a + b
+
+@njit
+def get_median(arr: np.array):
+    length = len(arr)
+    if length % 2 == 1:
+        return arr[length // 2]
+    else:
+        return (arr[length // 2 - 1] + arr[length // 2]) / 2
+
+@njit
+def generate_density_map_sparse(circles: List[Tuple[int]], x, z, width, height, step_divisor=1) -> np.ndarray:
+    padding = 100
+    matrix = np.zeros((width+2*padding, height+2*padding), dtype=np.uint32)
+    
+    matrix_work = np.zeros((width+2*padding, height+2*padding, 5), dtype=np.uint8)
+    matrix_count = np.zeros((width+2*padding, height+2*padding), dtype=np.uint8)
+    
+    for (cx, cz) in circles:
+        for ix in range(-90, 90, 1):
+            for iz in range(-90, 90, 1):
+                sqr_dist = ix*ix + iz*iz
+                
+                if not (2500 < sqr_dist < 8100):
+                    continue
+                
+                dist = int(math.sqrt(sqr_dist))
+                
+                mx = cx + ix - x + padding
+                mz = cz + iz - z + padding
+                
+                count = matrix_count[mx, mz]
+                if count >= 5:
+                    continue
+                
+                matrix_work[mx, mz, count] = dist
+                matrix_count[mx, mz] = count + 1
+                
+                prev_count = matrix_count[mx, mz]
+                prev_value = matrix[mx, mz]
+                
+                prev_min = (prev_value >> 0x18) & 0xFF
+                prev_max = (prev_value >> 0x10) & 0xFF
+                prev_avg = (prev_value >> 0x08) & 0xFF
+                
+                new_count = prev_count + 1
+                new_min = dist if prev_min == 0 else min(dist, prev_min)
+                new_max = dist if prev_max == 0 else max(dist, prev_min)
+                new_avg = dist if prev_count == 0 else int((dist + prev_count * prev_avg) / new_count) 
+                
+                new_collection = matrix_work[mx, mz, :new_count]
+                new_median = int(get_median(new_collection))
+                
+                new_value = ((new_min & 0xFF) << 0x18) + ((new_max & 0xFF) << 0x10) + ((new_avg & 0xFF) << 0x08) + new_median & 0xFF
+                
+                matrix_count[mx, mz] = prev_count + 1
+                matrix[mx, mz] = new_value
+            
+    print(matrix.shape)
+               
+    return matrix
+                
+def sample_for_encounters(self, x, z) -> Tuple[float]:
+    
+    max_dist = 0
+    min_dist = 10000
+    
+    valid_count = 0
+    # valid_dists = np.array([0, 0, 0, 0, 0])
+    
+    for circle in self.circles:
+        cx, cz = circle["x"], circle["z"]
+        
+        dx = cx - x
+        if dx*dx > 8100:
+            continue
+        
+        dz = cz - z
+        if dz*dz > 8100:
+            continue
+        
+        sqr_circle_dist = dx*dx + dz*dz
+        
+        if sqr_circle_dist < 2500:
+            continue
+        if sqr_circle_dist > 8100:
+            continue
+        
+        circle_dist = math.sqrt(sqr_circle_dist)
+        
+        if circle_dist < min_dist:
+            min_dist = int(circle_dist)
+            
+        if circle_dist > max_dist:
+            max_dist = int(circle_dist)
+            
+        # valid_dists[valid_count] = circle_dist
+        valid_count += 1
+        
+        if valid_count >= 5:
+            break
+    
+    if valid_count == 0:
+        return 0xFFFFFFFF
+    
+    # avg_dist = sum(valid_dists[:valid_count]) // valid_count
+    # median_dist = int(statistics.median(valid_dists[:valid_count]))
+    
+    a = (max_dist & 0xFF) << 24
+    b = (min_dist & 0xFF) << 16
+    # c = (avg_dist & 0xFF) << 8
+    # d = (median_dist & 0xFF)
+    
+    # return a + b + c + d
+    return a + b
 
 def plot_map(map_data: MapData):
     verts = [vert for block in map_data.walls for vert in block]
@@ -174,6 +343,42 @@ def plot_map(map_data: MapData):
     
     plt.show()
 
+def get_map_ids_from_filename(filename):
+    match = re.search(r'mapdata-(\d+)-(\d+)\.json$', filename)
+    if match:
+        map_id = int(match.group(1))
+        submap_id = int(match.group(2))
+        return True, map_id, submap_id
+    else:
+        return False, -1, -1
+
+def generate_all_mapping_data(map_json_folder_path):
+    map_json_pattern = os.path.join(map_json_folder_path, "*.json")
+    map_json_files = glob.glob(map_json_pattern)
+    
+    for file_path in map_json_files:
+        found_ids, map_id, submap_id = get_map_ids_from_filename(file_path)
+        if found_ids and (map_id, submap_id) in ENCOUNTER_AREAS: 
+            area_name = ENCOUNTER_AREAS[(map_id, submap_id)]
+            print(area_name)
+            data = MapData.load_from_path(file_path)
+            
+            circles = [(int(circle["x"]), int(circle["z"])) for circle in data.circles]
+            (x, z, width, height) = data.get_bounds()
+            density_map = generate_density_map_sparse(circles, x, z, width, height)
+            
+            # if area_name == "Holy Plains":
+            #     plt.imshow(density_map)
+                
+            #     plt.axis('scaled')
+            #     plt.show()
+                
+            #     exit(0)
+            
+            np.save(file_path, density_map)
+            
+            print("... done!")
+
 def main():
     import sys
     
@@ -181,26 +386,28 @@ def main():
     # plot_crumbs(filename)
     
     # geometry_path = sys.argv[1]
-    # find_oob_angles(geometry_path)
+    # # find_oob_angles(geometry_path)
 
-    mapdata_path = sys.argv[1]
-    mapdata = MapData.load_from_path(mapdata_path)
+    # mapdata_path = sys.argv[1]
+    # mapdata = MapData.load_from_path(mapdata_path)
     
-    density_path = mapdata_path + ".density"
+    # density_path = mapdata_path + ".density"
     
-    if os.path.exists(density_path + ".npy"):
-        print("Loading existing density array ...")
-        density = np.load(density_path + ".npy")
-    else:
-        print("Density data not found, generating one ...")
-        density = mapdata.get_density_image_data()
-        np.save(density_path, density)
-        print("Saved new density array ...")
+    # if os.path.exists(density_path + ".npy"):
+    #     print("Loading existing density array ...")
+    #     density = np.load(density_path + ".npy")
+    # else:
+    #     print("Density data not found, generating one ...")
+    #     density = mapdata.get_density_image_data()
+    #     np.save(density_path, density)
+    #     print("Saved new density array ...")
     
-    print("Done!")
-    print(density.shape)
+    # print("Done!")
+    # print(density.shape)
     
     # plot_map(mapdata)
+    
+    generate_all_mapping_data("../lua/data")
 
 if __name__ == "__main__":
     main()

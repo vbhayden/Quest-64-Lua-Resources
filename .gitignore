@@ -1,6 +1,4 @@
-lua/data
 python/roms
-python/data
 python/out
 python/__pycache__
 python/sims/__pycache__

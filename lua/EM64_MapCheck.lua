@@ -268,7 +268,7 @@ local function WriteMapData(path, geometry_chains, circles, regions, spirits, ch
         file:write('\t\t[\n')
         for k, coord in pairs(geometry_chain) do
             if k == #geometry_chain then last_char = "" else last_char = "," end
-            file:write(string.format('\t\t\t{"x": %.2f, "z": %.2f}%s\n', coord.x, coord.z, last_char))
+            file:write(string.format('\t\t\t{"x": %.4f, "z": %.4f}%s\n', coord.x, coord.z, last_char))
         end
         if chain_index == #geometry_chains then last_char = "" else last_char = "," end
         file:write(string.format('\t\t]%s\n', last_char))
@@ -280,7 +280,7 @@ local function WriteMapData(path, geometry_chains, circles, regions, spirits, ch
     for circle_index, circle in pairs(circles) do
         local last_char = ","
         if circle_index == #circles then last_char = "" else last_char = "," end
-        file:write(string.format('\t\t{"x": %.2f, "z": %.2f}%s\n', circle.x, circle.z, last_char))
+        file:write(string.format('\t\t{"x": %.4f, "z": %.4f}%s\n', circle.x, circle.z, last_char))
     end
     file:write('\t],\n')
     
@@ -288,7 +288,7 @@ local function WriteMapData(path, geometry_chains, circles, regions, spirits, ch
     for region_index, region in pairs(regions) do
         local last_char = ","
         if region_index == #regions then last_char = "" else last_char = "," end
-        file:write(string.format('\t\t{"x": %.2f, "z": %.2f, "width": %.2f, "depth": %.2f}%s\n', region.x, region.z, region.w, region.d, last_char))
+        file:write(string.format('\t\t{"x": %.4f, "z": %.4f, "width": %.4f, "depth": %.4f}%s\n', region.x, region.z, region.w, region.d, last_char))
     end    
     file:write('\t],\n')
     
@@ -296,7 +296,7 @@ local function WriteMapData(path, geometry_chains, circles, regions, spirits, ch
     for spirit_index, spirit in pairs(spirits) do
         local last_char = ","
         if spirit_index == #spirits then last_char = "" else last_char = "," end
-        file:write(string.format('\t\t{"x": %.2f, "z": %.2f}%s\n', spirit.x, spirit.z, last_char))
+        file:write(string.format('\t\t{"x": %.4f, "z": %.4f}%s\n', spirit.x, spirit.z, last_char))
     end    
     file:write('\t],\n')
     
@@ -304,7 +304,7 @@ local function WriteMapData(path, geometry_chains, circles, regions, spirits, ch
     for chest_index, chest in pairs(chests) do
         local last_char = ","
         if chest_index == #chests then last_char = "" else last_char = "," end
-        file:write(string.format('\t\t{"x": %.2f, "z": %.2f, "angle": %.2f}%s\n', chest.x, chest.z, chest.angle, last_char))
+        file:write(string.format('\t\t{"x": %.4f, "z": %.4f, "angle": %.4f}%s\n', chest.x, chest.z, chest.angle, last_char))
     end    
     file:write('\t]\n')
     
