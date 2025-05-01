@@ -16,7 +16,7 @@ BRIAN_START_Y = np.float32(0)
 BRIAN_START_Z = np.float32(-167.22)
 
 BRIAN_HP = 100
-BRIAN_MP = 24
+BRIAN_MP = 29
 BRIAN_AGILITY = 24
 BRIAN_DEFENSE = 20
 BRIAN_FIRE = 1
@@ -41,13 +41,18 @@ ENEMY_AGILITY = 77
 ENEMY_ATTACK = 24
 ENEMY_SIZE_MODIFIER = np.float32(0.07)
 ENEMY_SIZE_RAW = 70
+ENEMY_HEIGHT_RAW = 260
 ENEMY_SIZE = np.float32(ENEMY_SIZE_MODIFIER * ENEMY_SIZE_RAW)
+ENEMY_HEIGHT = ENEMY_HEIGHT_RAW * ENEMY_SIZE_MODIFIER
 
 SPELL_POWER_AVALANCHE = 460
 SPELL_POWER_ROCK_1 = 290
 SPELL_POWER_WATER_1 = 365
 SPELL_POWER_WATER_2 = 374
 SPELL_POWER_WATER_3 = 384
+
+AVALANCHE_ROCK_FALL_SPEED = 0.3
+AVALANCHE_ROCK_INITIAL_HEIGHT = 32.4
 
 DECISION_BARRIER = 0
 DECISION_AVALANCHE = 1
@@ -211,6 +216,13 @@ c_2=0xD3DC167E
 # print(f"{a_30=:8X}, {c_30=:8X}")
 # print(f"{a_2=:8X}, {c_2=:8X}")
 
+@njit
+def get_movement_radius(actor_agility) -> float:
+    return 17 + actor_agility * 0.2857
+
+BRIAN_MOVEMENT_RADIUS = get_movement_radius(BRIAN_AGILITY)
+NEPTY_MOVEMENT_RADIUS = get_movement_radius(ENEMY_AGILITY)
+
 # exit(0)
 
 @njit
@@ -264,11 +276,41 @@ def get_bonus_table():
     return BONUS_TABLE
 
 @njit()
+def get_coord_distance(ax, az, bx, bz):
+    dx = ax - bx
+    dz = az - bz
+    
+    return math.sqrt(dx*dx + dz*dz)
+
+@njit()
+def get_array_distance(a, b):
+    dx = a[0] - b[0]
+    dz = a[1] - b[1]
+    
+    return math.sqrt(dx*dx + dz*dz)
+
+@njit()
+def get_coord_direction(from_x, from_z, to_x, to_z):
+    dx = to_x - from_x
+    dz = to_z - from_z
+    d = math.sqrt(dx*dx + dz*dz)
+    
+    return dx / d, dz / d
+
+@njit()
+def get_array_direction(point_from, point_to):
+    dx = point_to[0] - point_from[0]
+    dz = point_to[1] - point_from[1]
+    d = math.sqrt(dx*dx + dz*dz)
+    
+    return dx / d, dz / d
+
+@njit()
 def get_collision_distance_to_brian(brian_x, brian_z, enemy_x, enemy_z):
     
-    dx = np.float32(enemy_x - brian_x)
-    dz = np.float32(enemy_z - brian_z)
-    distance_to_brian = np.float32(math.sqrt(dx * dx + dz * dz)) - BRIAN_COLLISION_RADIUS
+    dx = enemy_x - brian_x
+    dz = enemy_z - brian_z
+    distance_to_brian = math.sqrt(dx * dx + dz * dz) - BRIAN_COLLISION_RADIUS
 
     return distance_to_brian
 
@@ -329,7 +371,7 @@ def calculate_brian_min_damage(element: int, spell_power: int, weakness_active: 
 
     resulting_power = spell_power * spell_bonus
 
-    affinity = 0.5
+    affinity = 1
     raw_damage = resulting_power * affinity
 
     enemy_defense = ENEMY_DEFENSE
@@ -357,24 +399,22 @@ def calculate_enemy_min_damage(attack_power, spell_power) -> int:
 @njit()
 def does_rock_overlap_nepty(rock_x, rock_y, rock_z, nepty_x, nepty_z):
     
-    ENEMY_VERTICAL_AABB_RANGE = np.float32(24.64)
-    vertical_aabb_range = ENEMY_POSITION_Y + ENEMY_VERTICAL_AABB_RANGE
+    cx = nepty_x
+    cy = 0
+    cz = nepty_z
     
-    if rock_y > vertical_aabb_range:
-        return False
+    collision_radius = ENEMY_SIZE
+    collision_height = ENEMY_HEIGHT
+
+    dx = cx - rock_x
+    dz = cz - rock_z
     
-    dx = np.float32(rock_x) - np.float32(nepty_x)
-    dz = np.float32(rock_z) - np.float32(nepty_z)
+    dy = (cy + collision_height * 0.5 - rock_y) * 0.5
 
-    size = np.float32(ENEMY_SIZE)
-    skin_width = 0.0
-    enemy_bounds = np.float32(size) + np.float32(size) * np.float32(skin_width)
-    distance = np.float32(math.sqrt(np.float32(dx * dx) + np.float32(dz * dz)))
+    radial_sum = 10.0 + collision_radius
+    elliptical_distance = math.sqrt(dx*dx + dy*dy + dz*dz)
 
-    rock_radius = np.float32(10.0)
-
-    overlaps = np.float32(distance) < np.float32(rock_radius + enemy_bounds)
-    return overlaps
+    return radial_sum > elliptical_distance
 
 @njit()
 def simulate_avalanche_rock_hit(seed: int, weakness_active) -> Tuple[bool, int, int]:
@@ -398,7 +438,7 @@ def simulate_avalanche_rock_hit(seed: int, weakness_active) -> Tuple[bool, int, 
     return True, damage, damage_seed
 
 @njit()
-def simulate_avalanche(seed: int, nepty_x, nepty_z, weakness_active=False, debug=False):
+def simulate_avalanche(seed: int, brian_x, brian_z, nepty_x, nepty_z, weakness_active=False, debug=False):
     rock_overlaps = 0
     rock_hits = 0
     total_damage = 0
@@ -434,7 +474,7 @@ def simulate_avalanche(seed: int, nepty_x, nepty_z, weakness_active=False, debug
             if rock_can_damage:
                 
                 falling_frames = frames_active - harmless_duration + 1
-                y -= 0.3 * falling_frames
+                y -= AVALANCHE_ROCK_FALL_SPEED * falling_frames
                 
                 rock_coords[rock_index] = [x, y, z]
                 
@@ -466,9 +506,9 @@ def simulate_avalanche(seed: int, nepty_x, nepty_z, weakness_active=False, debug
             angle = angle_roll * 22.5 * math.pi / 180.0
             offset = 20 + offset_roll
 
-            rock_x = BRIAN_X - offset * math.sin(angle)
-            rock_y = AVALANCHE_ROCK_ELEVATIONS[0] + BRIAN_Y
-            rock_z = BRIAN_Z - offset * math.cos(angle)
+            rock_x = brian_x - offset * math.sin(angle)
+            rock_y = AVALANCHE_ROCK_INITIAL_HEIGHT
+            rock_z = brian_z - offset * math.cos(angle)
             
             rock_coords[rocks_released] = [rock_x, rock_y, rock_z]
             rocks_released += 1
@@ -653,35 +693,23 @@ def simulate_brian_avalanche_turn(seed, can_attack, brian_stats, brian_buffs, tu
     
     weakness_currently_active = enemy_debuffs[0] > 0
     
-    brian_x = brian_coords[0]
-    brian_z = brian_coords[1]
-    nepty_x = nepty_coords[0]
-    nepty_z = nepty_coords[1]
-    
-    avalanche_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, brian_x, brian_z, nepty_x, nepty_z, weakness_currently_active)
-    melee_hit, melee_damage, melee_seed = simulate_brian_melee(seed, weakness_currently_active, back_attack=True, can_crit=is_jp)
-    combo_hit, combo_damage, combo_seed = simulate_brian_melee(melee_seed, weakness_currently_active, back_attack=True, is_combo=True, can_crit=is_jp)
-    # water_hit, water_damage, water_seed = simulate_water_1(seed, weakness_currently_active)
     rock_hit, rock_damage, rock_seed = simulate_rock_1(seed, weakness_currently_active)
-
-    melee_hit_count = 0
-    if melee_hit:
-        melee_hit_count += 1
-    if combo_hit:
-        melee_hit_count += 1
-    
-    melee_damage = melee_damage + combo_damage
-    melee_seed = combo_seed
-
-    # if can_attack and melee_damage >= enemy_stats[0]:
-    #     brian_stats[1] += melee_hit_count
-    #     enemy_stats[0] -= melee_damage
-    #     return DECISION_MELEE, melee_seed
 
     # We play Nepty a little differently in JP
     #
     should_barrier = (turns_since_barrier >= 2) or brian_buffs[0] == 0
     barrier_hit, barrier_roll, barrier_turns, barrier_seed = simulate_barrier(seed, is_jp=is_jp)
+    
+    # Coords
+    #
+    brian_x = brian_coords[0]
+    brian_z = brian_coords[1]
+    nepty_x = nepty_coords[0]
+    nepty_z = nepty_coords[1]
+
+    if brian_stats[0] <= 50 and (healing_items > 0):
+        brian_stats[0] = BRIAN_HP
+        return DECISION_HEALING_ITEM, seed, True
     
     if can_afford_spells and should_barrier:
         brian_stats[1] -= 3
@@ -689,56 +717,132 @@ def simulate_brian_avalanche_turn(seed, can_attack, brian_stats, brian_buffs, tu
 
         return DECISION_BARRIER, barrier_seed, barrier_hit
     
-    if brian_stats[0] <= 50 and (healing_items > 0):
-        brian_stats[0] = BRIAN_HP
-        return DECISION_HEALING_ITEM, seed, True
-    
-    # ## Confusion Check
-    # ##
-    # ## Prioritize the confusion roll bias when we're low on mana,
-    # ## with much lower odds when we're comfy.
-    # ##
-    # confusion_bias = (brian_stats[1] <= 9 and roll_for_variation(5) == 1) or (roll_for_variation(12) == 1)
-    # confusion_not_strong = brian_buffs[1] <= 1
-    # confusion_hit, _, confusion_turns, confusion_seed = simulate_confusion(seed)
-    
-    # if can_afford_spells and confusion_not_strong and confusion_bias and confusion_hit and confusion_turns >= 2:
-    #     brian_stats[1] -= 3
-    #     brian_buffs[1] = confusion_turns
-    #     return DECISION_CONFUSION, confusion_seed
-    
-    
-    # # if can_attack and can_afford_spells and avalanche_damage >= 140:
-    # #     brian_stats[1] -= 3
-    # #     enemy_stats[0] -= avalanche_damage
-    # #     return DECISION_AVALANCHE, avalanche_seed
-    
-    # melee_bias = ((not can_afford_spells) and coinflip()) or (roll_for_variation(4) == 1)
-    # if can_attack and melee_hit and melee_bias:
-    #     brian_stats[1] += 1
-    #     enemy_stats[0] -= melee_damage
-    #     return DECISION_MELEE, melee_seed
-    
-    # if can_attack and can_afford_spells and avalanche_hits >= 1:
-    #     brian_stats[1] -= 3
-    #     enemy_stats[0] -= avalanche_damage
-    #     return DECISION_AVALANCHE, avalanche_seed
-    
-    ## Prefer to heal here, but allow for variance
-    ##
-    elif (brian_stats[1] <= 3) and (mana_items > 0):
-        brian_stats[1] = BRIAN_MP
-        return DECISION_MANA_ITEM, seed, True
+    # Prefer to use a mana item, but use Confusion if we are out
+    #
+    elif (brian_stats[1] <= 3):
+        if mana_items > 0:
+            brian_stats[1] = BRIAN_MP
+            return DECISION_MANA_ITEM, seed, True
+        
+        elif can_afford_spells:
+            
+            # For Confusion, we want to stay away so that Nepty ideally
+            # rolls for Bubble
+            #
+            nepty_to_brian_x, nepty_to_brian_z = get_array_direction(nepty_coords, brian_coords)
+            random_distance = NEPTY_BUBBLE_RANGE + 5.0
 
+            ideal_x = nepty_to_brian_x * random_distance + nepty_coords[0]
+            ideal_z = nepty_to_brian_z * random_distance + nepty_coords[1]
+            
+            distance_to_ideal = get_coord_distance(brian_x, brian_z, ideal_x, ideal_z)
+            if distance_to_ideal > BRIAN_MOVEMENT_RADIUS:
+                distance_to_ideal = BRIAN_MOVEMENT_RADIUS
+
+            brian_to_ideal_x, brian_to_ideal_z = get_coord_direction(brian_x, brian_z, ideal_x, ideal_z)
+
+            brian_coords[0] += brian_to_ideal_x * distance_to_ideal
+            brian_coords[1] += brian_to_ideal_z * distance_to_ideal
+            
+            confusion_hit, _, confusion_turns, confusion_seed = simulate_confusion(seed)
+
+            if confusion_hit:
+                brian_buffs[1] = confusion_turns + 1
+            
+            return DECISION_CONFUSION, confusion_seed, confusion_hit
+
+    if can_attack and can_afford_spells:
+
+        # Move Brian to roughly 25 units away from Nepty based on
+        # the current direction to her
+        #
+        nepty_to_brian_x, nepty_to_brian_z = get_array_direction(nepty_coords, brian_coords)
+
+        # print("")
+        # print(f"Nepty to Brian: {nepty_to_brian_x:.4f}, {nepty_to_brian_z:.4f}")
+
+        random_distance = 25.0 + 4 - random.random() * 2
+
+        ideal_x = nepty_to_brian_x * random_distance + nepty_coords[0]
+        ideal_z = nepty_to_brian_z * random_distance + nepty_coords[1]
+        
+        distance_to_ideal = get_coord_distance(brian_x, brian_z, ideal_x, ideal_z)
+
+        if distance_to_ideal > BRIAN_MOVEMENT_RADIUS:
+            distance_to_ideal = BRIAN_MOVEMENT_RADIUS
+
+        direction_to_ideal_x, direction_to_ideal_z = get_coord_direction(brian_x, brian_z, ideal_x, ideal_z)
+        
+        # print(f"Brian to Ideal: {direction_to_ideal_x:.4f}, {direction_to_ideal_z:.4f}")
+        # print("")
+        # print(f"Brian: {brian_x:.4f}, {brian_z:.4f}")
+        # print(f"Ideal: {ideal_x:.4f}, {ideal_z:.4f}")
+        # print(f"Nepty: {nepty_x:.4f}, {nepty_z:.4f}")
+        # print("")
+
+        brian_coords[0] += direction_to_ideal_x * distance_to_ideal
+        brian_coords[1] += direction_to_ideal_z * distance_to_ideal
+
+        # print(brian_coords, nepty_coords, get_array_distance(brian_coords, nepty_coords))
+
+        avalanche_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, brian_coords[0], brian_coords[1], nepty_x, nepty_z, weakness_currently_active)
+
+        brian_stats[1] -= 3
+        enemy_stats[0] -= avalanche_damage
+        return DECISION_AVALANCHE, rock_seed, True
+    
     elif cannot_attack and can_afford_cheap_spells:
+        # For Rock, we want to stay away so that Nepty ideally
+        # rolls for Bubble
+        #
+        nepty_to_brian_x, nepty_to_brian_z = get_array_direction(nepty_coords, brian_coords)
+        random_distance = NEPTY_BUBBLE_RANGE + 5.0
+
+        ideal_x = nepty_to_brian_x * random_distance + nepty_coords[0]
+        ideal_z = nepty_to_brian_z * random_distance + nepty_coords[1]
+        
+        distance_to_ideal = get_coord_distance(brian_x, brian_z, ideal_x, ideal_z)
+        if distance_to_ideal > BRIAN_MOVEMENT_RADIUS:
+            distance_to_ideal = BRIAN_MOVEMENT_RADIUS
+
+        brian_to_ideal_x, brian_to_ideal_z = get_coord_direction(brian_x, brian_z, ideal_x, ideal_z)
+
+        brian_coords[0] += brian_to_ideal_x * distance_to_ideal
+        brian_coords[1] += brian_to_ideal_z * distance_to_ideal
+
         brian_stats[1] -= 1
         enemy_stats[0] -= rock_damage
         return DECISION_ROCK_1, rock_seed, True
 
     else:
-        brian_stats[1] += melee_hit_count
-        enemy_stats[0] -= melee_damage
-        return DECISION_MELEE, melee_seed, True
+        # For Melee, we will need to get close
+        #
+        distance_to_melee = get_coord_distance(brian_x, brian_z, nepty_x, nepty_z) - 3.5 - ENEMY_SIZE
+        if distance_to_melee <= BRIAN_MOVEMENT_RADIUS:
+
+            brian_to_ideal_x, brian_to_ideal_z = get_array_direction(nepty_coords, brian_coords)
+
+            brian_coords[0] = brian_to_ideal_x * (3.5 + ENEMY_SIZE) + nepty_coords[0]
+            brian_coords[1] = brian_to_ideal_z * (3.5 + ENEMY_SIZE) + nepty_coords[1]
+
+            melee_hit, melee_damage, melee_seed = simulate_brian_melee(seed, weakness_currently_active, back_attack=True, can_crit=is_jp)
+            combo_hit, combo_damage, combo_seed = simulate_brian_melee(melee_seed, weakness_currently_active, back_attack=True, is_combo=True, can_crit=is_jp)
+
+            melee_hit_count = 0
+            if melee_hit:
+                melee_hit_count += 1
+            if combo_hit:
+                melee_hit_count += 1
+            
+            melee_damage = melee_damage + combo_damage
+            melee_seed = combo_seed
+            
+            brian_stats[1] += melee_hit_count
+            enemy_stats[0] -= melee_damage
+            return DECISION_MELEE, melee_seed, True
+        
+        else:
+            return DECISION_PASS, seed, False
 
 
 @njit()
@@ -966,35 +1070,6 @@ def apply_damage_to_brian(damage: int, brian_stats: List[int], brian_buffs: List
     brian_stats[0] -= damage
 
 @njit()
-def get_array_distance(a, b):
-    dx = a[0] - b[0]
-    dz = a[1] - b[1]
-    
-    return math.sqrt(dx*dx + dz*dz)
-
-@njit()
-def get_array_direction(point_from, point_to):
-    dx = point_to[0] - point_from[0]
-    dz = point_to[1] - point_from[1]
-    d = math.sqrt(dx*dx + dz*dz)
-    
-    return dx / d, dz / d
-
-@njit()
-def move_nepty_towards_brian(nepty_position, brian_position):
-    distance_from_start = get_array_distance(nepty_position, [0, 0])
-    if distance_from_start < 2.0:
-        nepty_position[0] = ENEMY_SPOT_MID_X
-        nepty_position[1] = ENEMY_SPOT_MID_Z
-        return
-    
-    distance_from_mid = get_array_distance(nepty_position, ENEMY_SPOT_MID)
-    if distance_from_mid < 2.0:
-        nepty_position[0] = ENEMY_SPOT_CLOSE_X
-        nepty_position[1] = ENEMY_SPOT_CLOSE_Z
-        return
-
-@njit()
 def simulate_nepty_turn_simple(seed: int, brian_stats, brian_buffs, barrier_turns, is_jp=False) -> Tuple[int, int]:
     
     if barrier_turns > 0:
@@ -1040,12 +1115,15 @@ def simulate_nepty_turn_realistic(seed: int, brian_coords, nepty_coords, brian_s
         movement_cycles = int(math.ceil(distance_outside_of_range / NEPTY_MOVEMENT_CYCLE_DISTANCE))
         movement_distance = movement_cycles * NEPTY_MOVEMENT_CYCLE_DISTANCE
         
-        direction_x, direction_z = get_array_direction(brian_coords, nepty_coords)
+        direction_x, direction_z = get_array_direction(nepty_coords, brian_coords)
         movement_x = direction_x * movement_distance
         movement_z = direction_z * movement_distance
 
         nepty_coords[0] += movement_x
         nepty_coords[1] += movement_z
+        
+        # print("Nepty Approach + Bubble:", nepty_coords, movement_x, movement_z, math.sqrt(movement_x**2 + movement_z**2), distance_outside_of_range)
+        
 
         # Consider these as being too far away to actually hit Brian,
         # so we'll just advance the RNG and assume that the player
@@ -1072,9 +1150,14 @@ def simulate_nepty_turn_realistic(seed: int, brian_coords, nepty_coords, brian_s
         movement_cycles = int(math.ceil(distance_outside_of_range / NEPTY_MOVEMENT_CYCLE_DISTANCE))
         movement_distance = movement_cycles * NEPTY_MOVEMENT_CYCLE_DISTANCE
         
-        direction_x, direction_z = get_array_direction(brian_coords, nepty_coords)
+        direction_x, direction_z = get_array_direction(nepty_coords, brian_coords)
         movement_x = direction_x * movement_distance
         movement_z = direction_z * movement_distance
+        
+        nepty_coords[0] += movement_x
+        nepty_coords[1] += movement_z
+
+        # print("Nepty Approach + Shield:", nepty_coords, movement_x, movement_z, math.sqrt(movement_x**2 + movement_z**2), distance_outside_of_range)
         
         # Unlike the Bubble case, Shield is definitely going to hit Brian.
         #
@@ -1175,7 +1258,7 @@ def sim_nepty_with_melee(seed: int, max_turns: int) -> Tuple[bool, int, Tuple[np
         
         
         if nepty_stats[0] > 0:
-            iter_seed, damage = simulate_nepty_turn(
+            iter_seed, damage = simulate_nepty_turn_simple(
                 seed=iter_seed, 
                 brian_stats=brian_stats, 
                 brian_buffs=brian_buffs, 
@@ -1217,17 +1300,20 @@ def sim_nepty_with_avalanche(seed: int, max_turns: int) -> Tuple[bool, int, Tupl
     
     turns = 0
     turns_since_barrier = 100
+    barrier_has_hit = False
 
     combat_seed = seed
         
     while brian_stats[0] > 0 and nepty_stats[0] > 0 and turns < max_turns:
         
-        can_attack = turns >= 2
+        can_attack = barrier_has_hit
 
         decision, iter_seed, didnt_miss = simulate_brian_avalanche_turn(
             seed=combat_seed, 
             turns_since_barrier=turns_since_barrier,
             can_attack=can_attack, 
+            brian_coords=brian_coords,
+            nepty_coords=nepty_coords,
             brian_stats=brian_stats, 
             brian_buffs=brian_buffs, 
             enemy_stats=nepty_stats, 
@@ -1236,6 +1322,9 @@ def sim_nepty_with_avalanche(seed: int, max_turns: int) -> Tuple[bool, int, Tupl
             healing_items=healing_items,
             mana_items=mana_items,
         )
+
+        if not barrier_has_hit and (decision == DECISION_BARRIER) and (brian_buffs[0] > 0):
+            barrier_has_hit = True
         
         if decision == DECISION_HEALING_ITEM:
             healing_items -= 1
@@ -1258,10 +1347,10 @@ def sim_nepty_with_avalanche(seed: int, max_turns: int) -> Tuple[bool, int, Tupl
         end_brian_turn(brian_buffs)
         
         # print(f"{combat_seed:8X}->{iter_seed:8X}", decision, f"{get_decision_text(decision):10}", brian_stats, brian_buffs, nepty_stats)
+        # print(f"{combat_seed:8X}->Brian: {brian_coords[0]:.2f}, {brian_coords[1]:.2f}, Nepty: {nepty_coords[0]:.2f}, {nepty_coords[1]:.2f}, Dist: {get_array_distance(brian_coords, nepty_coords)}")
         
         if nepty_stats[0] <= 0:
             return True, turns + 1, (decision_hi, decision_lo)
-        
         
         if nepty_stats[0] > 0:
             iter_seed, damage = simulate_nepty_turn_realistic(
@@ -1269,6 +1358,8 @@ def sim_nepty_with_avalanche(seed: int, max_turns: int) -> Tuple[bool, int, Tupl
                 brian_stats=brian_stats, 
                 brian_buffs=brian_buffs, 
                 barrier_turns=brian_buffs[0],
+                brian_coords=brian_coords,
+                nepty_coords=nepty_coords,
                 is_jp=True
             )
             
@@ -1284,7 +1375,26 @@ def sim_nepty_with_avalanche(seed: int, max_turns: int) -> Tuple[bool, int, Tupl
     return False, turns, (decision_hi, decision_lo)
 
 @njit()
-def run_sim(starting_seed, sim_count, max_turns=32):
+def run_sim_avalanche(starting_seed, sim_count, max_turns=32):
+    
+    num_success = 0
+    num_defeats = 0
+    turn_array = np.zeros((max_turns), dtype=np.int32)
+    
+    for k in range(sim_count):
+        
+        success, turns, (decisions_hi, decisions_lo) = sim_nepty_with_avalanche(starting_seed + k, max_turns)
+
+        if success:
+            num_success += 1
+            turn_array[turns-1] += 1
+        else:
+            num_defeats += 1
+
+    return num_success, num_defeats, turn_array
+
+@njit()
+def run_sim_melee(starting_seed, sim_count, max_turns=32):
     
     num_success = 0
     num_defeats = 0
@@ -1327,78 +1437,6 @@ def increment_against_hex_cap(current: np.longlong, hex_cap: np.longlong) -> np.
     return current + increment
 
 
-@dataclass
-class DamageExpectation:
-    start_seed: int
-    final_seed: int
-    hits: int
-    damage: int
-    position: List[float]
-    brian_position: List[float]
-    weakness_active: bool = False
-    
-@dataclass
-class NeptyExpectation:
-    start_seed: int
-    final_seed: int
-    damage: int
-    position: List[float]
-    brian_position: List[float]
-
-AVALANCHE_EXPECTATIONS = [
-    # DamageExpectation(start_seed=0x69905392, final_seed=0x4DC05C3E, hits=4, damage=256, position=[ENEMY_SPOT_CLOSE_X, ENEMY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z]),
-    # DamageExpectation(start_seed=0x88F5947F, final_seed=0x00134c80, hits=3, damage=199, position=[ENEMY_SPOT_CLOSE_X, ENEMY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z]),
-    DamageExpectation(start_seed=0x4FB42983, final_seed=0xFE269548, hits=1, damage=92,  position=[ENEMY_SPOT_CLOSE_X, ENEMY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=True),
-]
-ENEMY_TURN_EXPECTATIONS = [
-    NeptyExpectation(start_seed=0xCB72A799, final_seed=0x14D0681F, damage=48, position=[0, 0], brian_position=[BRIAN_X, BRIAN_Z]),
-    NeptyExpectation(start_seed=0x14D0681F, final_seed=0x40D9AE15, damage=96, position=[ENEMY_SPOT_MID_X, ENEMY_SPOT_MID_Z], brian_position=[BRIAN_X, BRIAN_Z]),
-    NeptyExpectation(start_seed=0x00000000, final_seed=0x1F7301BF, damage=48, position=[ENEMY_SPOT_MID_X, ENEMY_SPOT_MID_Z], brian_position=[BRIAN_X, BRIAN_Z]),
-    NeptyExpectation(start_seed=0x7ECE651E, final_seed=0x9120F02C, damage=47, position=[0,0], brian_position=[BRIAN_X, BRIAN_Z]),
-]
-
-def test_nepty_turn():
-    print("-- Nepty Turn Testing --")
-    for k, expectation in enumerate(ENEMY_TURN_EXPECTATIONS):
-        print(f"  -- Case {k}:")
-        sim_seed, sim_damage = simulate_nepty_turn(
-            seed=expectation.start_seed, 
-            brian_stats=[BRIAN_HP, BRIAN_MP], 
-            brian_buffs=[0, 0], 
-            barrier_turns=0
-        )
-        
-        if (sim_damage, sim_seed) == (expectation.damage, expectation.final_seed):
-            print("    -- passed!")
-        else:
-            print("    -- Failed!")
-            print(f"     -- Damage: {sim_damage}, expected {expectation.damage}")
-            print(f"     -- Seed: {sim_seed:8X}, expected {expectation.final_seed:8X}")
-
-def test_avalanche():
-    print("-- Avalanche Testing --")
-    for k, expectation in enumerate(AVALANCHE_EXPECTATIONS):
-        print(f"  -- Case {k}:")
-        sim_hits, sim_damage, sim_seed = simulate_avalanche(
-            seed=expectation.start_seed, 
-            nepty_x=expectation.position[0],
-            nepty_z=expectation.position[1],
-            weakness_active=expectation.weakness_active
-        )
-        
-        if (sim_hits, sim_damage, sim_seed) == (expectation.hits, expectation.damage, expectation.final_seed):
-            print("    -- passed!")
-        else:
-            print("    -- Failed!")
-            print(f"     -- Hits: {sim_hits}, expected {expectation.hits}")
-            print(f"     -- Damage: {sim_damage}, expected {expectation.damage}")
-            print(f"     -- Seed: {sim_seed:8X}, expected {expectation.final_seed:8X}")
-
-def test():
-    # test_rock_1()
-    test_avalanche()
-    test_nepty_turn()
-
 # ALLOW_MISTAKES=False
 ALLOW_MISTAKES=True
  
@@ -1414,7 +1452,7 @@ def main():
     seed = 0xCB72A799
     
     
-    # success, turns, (decisions_hi, decisions_lo) = sim_nepty_with_melee(seed, 32)
+    # success, turns, (decisions_hi, decisions_lo) = sim_nepty_with_avalanche(seed, 32)
     # print(f"{seed:8X}--------") 
     # print(f"{success=} {turns=}")
     # for turn in range(turns):
@@ -1434,8 +1472,75 @@ def main():
     # print(hit_chance)
     # return
 
+
+
+    # process_count = 8
+    # sim_count = 0x4000
+    # max_turns_allowed = 32
+    
+    # print(f"Starting Nepty Sim, {sim_count * process_count} runs over {process_count} processes ...")
+        
+    # pool = Pool(processes=process_count)
+    # args = [
+    #     [
+    #         seed + k * sim_count,
+    #         sim_count,
+    #         max_turns_allowed
+    #     ]
+    #     for k in range(8)
+    # ]
+    # results = pool.starmap(run_sim_melee, args)
+    # pool.close()
+            
+    # end = time.time()
+    
+    # total_wins = 0
+    # total_losses = 0
+    # total_turn_array = [0 for _ in range(max_turns_allowed)]
+
+    # for [wins, losses, turn_array] in results:
+    #     total_wins += wins
+    #     total_losses += losses
+        
+    #     for k in range(max_turns_allowed):
+    #         total_turn_array[k] += int(turn_array[k])
+
+    # min_turns = min(total_turn_array)
+    # max_turns = max(total_turn_array)
+    # success_rate = total_wins / (total_wins + total_losses)
+
+    # print(total_wins, total_losses, min_turns, max_turns)
+    # print(f"Elapsed: {end-start:.2f}")
+
+    # x = [f"{k+1}" for k in range(max_turns_allowed)]
+    # y = [turns for turns in total_turn_array]
+    
+    # colors = plt.cm.hsv(np.linspace(0.5, 0.0, max_turns_allowed))
+    
+    # plt.bar(x, y, color=colors, edgecolor='black', width=1)
+    
+    # plt.xlabel("Number of Turns")
+    # plt.ylabel("Frequency")
+    
+    # plt.xticks(range(1, max_turns_allowed+1))
+    
+    # plt.grid(axis='x', which='both', linestyle='--', linewidth=0.5)
+    # plt.grid(axis='y', which='both', linestyle='--', linewidth=0.5)
+
+    # # seaborn.barplot(total_turn_array)
+
+    # mistake_text = "Perfect Inputs" if not ALLOW_MISTAKES else "Non-Perfect Inputs"
+    # plt.title(f"JP Nepty with Melee - {success_rate:.2f} Success Rate, {sim_count * process_count} seeds, {mistake_text}")
+    # plt.show()
+
+
+
+
+
+
+
     process_count = 8
-    sim_count = 0x400000
+    sim_count = 0x4000
     max_turns_allowed = 32
     
     print(f"Starting Nepty Sim, {sim_count * process_count} runs over {process_count} processes ...")
@@ -1449,7 +1554,7 @@ def main():
         ]
         for k in range(8)
     ]
-    results = pool.starmap(run_sim, args)
+    results = pool.starmap(run_sim_avalanche, args)
     pool.close()
             
     end = time.time()
@@ -1489,9 +1594,19 @@ def main():
 
     # seaborn.barplot(total_turn_array)
 
-    mistake_text = "Perfect Inputs" if not ALLOW_MISTAKES else "Non-Perfect Inputs"
-    plt.title(f"JP Nepty with Melee - {success_rate:.2f} Success Rate, {sim_count * process_count} seeds, {mistake_text}")
+    plt.title(f"JP Nepty with Avalanche - {success_rate:.2f} Success Rate, {sim_count * process_count} seeds")
     plt.show()
+
+
+
+
+
+
+
+
+
+
+
 
     # heal_range = 1
     # exit_range = 1
