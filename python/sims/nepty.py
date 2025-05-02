@@ -15,10 +15,10 @@ BRIAN_START_X = np.float32(351.65)
 BRIAN_START_Y = np.float32(0)
 BRIAN_START_Z = np.float32(-167.22)
 
-BRIAN_HP = 100
+BRIAN_HP = 91
 BRIAN_MP = 29
 BRIAN_AGILITY = 24
-BRIAN_DEFENSE = 20
+BRIAN_DEFENSE = 25
 BRIAN_FIRE = 1
 BRIAN_EARTH = 36
 BRIAN_WATER = 25
@@ -685,20 +685,13 @@ def simulate_brian_melee(seed, weakness_active=False, back_attack=False, is_comb
     return True, damage, damage_seed
 
 @njit()
-def simulate_brian_avalanche_turn(seed, can_attack, brian_stats, brian_buffs, turns_since_barrier, brian_coords, nepty_coords, enemy_stats, enemy_debuffs, is_jp=False, healing_items=2, mana_items=2) -> Tuple[int, int, bool]:
+def simulate_brian_avalanche_turn(seed, can_attack, brian_stats, brian_buffs, turns_since_barrier, brian_coords, nepty_coords, enemy_stats, enemy_debuffs, is_jp=False, healing_items=2, mana_items=2, turns_between_barriers=3) -> Tuple[int, int, bool]:
     cannot_attack = not can_attack
     
     can_afford_spells = brian_stats[1] >= 3
     can_afford_cheap_spells = brian_stats[1] >= 1
     
     weakness_currently_active = enemy_debuffs[0] > 0
-    
-    rock_hit, rock_damage, rock_seed = simulate_rock_1(seed, weakness_currently_active)
-
-    # We play Nepty a little differently in JP
-    #
-    should_barrier = (turns_since_barrier >= 2) or brian_buffs[0] == 0
-    barrier_hit, barrier_roll, barrier_turns, barrier_seed = simulate_barrier(seed, is_jp=is_jp)
     
     # Coords
     #
@@ -711,7 +704,32 @@ def simulate_brian_avalanche_turn(seed, can_attack, brian_stats, brian_buffs, tu
         brian_stats[0] = BRIAN_HP
         return DECISION_HEALING_ITEM, seed, True
     
+    # We play Nepty a little differently in JP
+    #
+    should_barrier = (turns_since_barrier >= turns_between_barriers) or brian_buffs[0] == 0
+
     if can_afford_spells and should_barrier:
+        
+        # For Barrier, we want to stay away so that Nepty ideally
+        # rolls for Bubble -- in case we miss.
+        #
+        nepty_to_brian_x, nepty_to_brian_z = get_array_direction(nepty_coords, brian_coords)
+        random_distance = NEPTY_BUBBLE_RANGE + 5.0
+
+        ideal_x = nepty_to_brian_x * random_distance + nepty_coords[0]
+        ideal_z = nepty_to_brian_z * random_distance + nepty_coords[1]
+        
+        distance_to_ideal = get_coord_distance(brian_x, brian_z, ideal_x, ideal_z)
+        if distance_to_ideal > BRIAN_MOVEMENT_RADIUS:
+            distance_to_ideal = BRIAN_MOVEMENT_RADIUS
+
+        brian_to_ideal_x, brian_to_ideal_z = get_coord_direction(brian_x, brian_z, ideal_x, ideal_z)
+
+        brian_coords[0] += brian_to_ideal_x * distance_to_ideal
+        brian_coords[1] += brian_to_ideal_z * distance_to_ideal
+
+        barrier_hit, barrier_roll, barrier_turns, barrier_seed = simulate_barrier(seed, is_jp=is_jp)
+
         brian_stats[1] -= 3
         brian_buffs[0] = barrier_turns + 1
 
@@ -789,7 +807,7 @@ def simulate_brian_avalanche_turn(seed, can_attack, brian_stats, brian_buffs, tu
 
         brian_stats[1] -= 3
         enemy_stats[0] -= avalanche_damage
-        return DECISION_AVALANCHE, rock_seed, True
+        return DECISION_AVALANCHE, avalanche_seed, True
     
     elif cannot_attack and can_afford_cheap_spells:
         # For Rock, we want to stay away so that Nepty ideally
@@ -809,6 +827,8 @@ def simulate_brian_avalanche_turn(seed, can_attack, brian_stats, brian_buffs, tu
 
         brian_coords[0] += brian_to_ideal_x * distance_to_ideal
         brian_coords[1] += brian_to_ideal_z * distance_to_ideal
+
+        rock_hit, rock_damage, rock_seed = simulate_rock_1(seed, weakness_currently_active)
 
         brian_stats[1] -= 1
         enemy_stats[0] -= rock_damage
@@ -1279,7 +1299,7 @@ def sim_nepty_with_melee(seed: int, max_turns: int) -> Tuple[bool, int, Tuple[np
 
 
 @njit()
-def sim_nepty_with_avalanche(seed: int, max_turns: int) -> Tuple[bool, int, Tuple[np.longlong, np.longlong]]:
+def sim_nepty_with_avalanche(seed: int, max_turns: int, turns_between_barriers: int) -> Tuple[bool, int, Tuple[np.longlong, np.longlong]]:
 
     brian_stats = [BRIAN_HP, BRIAN_MP]
     brian_buffs = [
@@ -1311,6 +1331,7 @@ def sim_nepty_with_avalanche(seed: int, max_turns: int) -> Tuple[bool, int, Tupl
         decision, iter_seed, didnt_miss = simulate_brian_avalanche_turn(
             seed=combat_seed, 
             turns_since_barrier=turns_since_barrier,
+            turns_between_barriers=turns_between_barriers,
             can_attack=can_attack, 
             brian_coords=brian_coords,
             nepty_coords=nepty_coords,
@@ -1375,7 +1396,7 @@ def sim_nepty_with_avalanche(seed: int, max_turns: int) -> Tuple[bool, int, Tupl
     return False, turns, (decision_hi, decision_lo)
 
 @njit()
-def run_sim_avalanche(starting_seed, sim_count, max_turns=32):
+def run_sim_avalanche(starting_seed, sim_count, max_turns=32, turns_between_barriers=3):
     
     num_success = 0
     num_defeats = 0
@@ -1383,7 +1404,7 @@ def run_sim_avalanche(starting_seed, sim_count, max_turns=32):
     
     for k in range(sim_count):
         
-        success, turns, (decisions_hi, decisions_lo) = sim_nepty_with_avalanche(starting_seed + k, max_turns)
+        success, turns, (decisions_hi, decisions_lo) = sim_nepty_with_avalanche(starting_seed + k, max_turns, turns_between_barriers)
 
         if success:
             num_success += 1
@@ -1540,16 +1561,22 @@ def main():
 
 
     process_count = 8
-    sim_count = 0x4000
+    sim_count = 0x2000
     max_turns_allowed = 32
     
     print(f"Starting Nepty Sim, {sim_count * process_count} runs over {process_count} processes ...")
-        
+    
+    # fig, axes = plt.subplots(3, 2)
+
+    # for turns_between_barriers in range(1, 6 + 1):
+            
+
     pool = Pool(processes=process_count)
     args = [
         [
             seed + k * sim_count,
             sim_count,
+            turns_between_barriers,
             max_turns_allowed
         ]
         for k in range(8)
@@ -1595,6 +1622,8 @@ def main():
     # seaborn.barplot(total_turn_array)
 
     plt.title(f"JP Nepty with Avalanche - {success_rate:.2f} Success Rate, {sim_count * process_count} seeds")
+    
+    
     plt.show()
 
 
