@@ -3,6 +3,8 @@ import time
 import random
 import math
 import numpy as np
+import os.path
+import json
 
 import seaborn
 import matplotlib.pyplot as plt
@@ -1458,6 +1460,23 @@ def increment_against_hex_cap(current: np.longlong, hex_cap: np.longlong) -> np.
     return current + increment
 
 
+def get_sim_data(seed, count, barriers):
+    expected_path = f"data/nepty.{seed:08X}.{count}.{barriers}.json"
+    exists = os.path.isfile(expected_path)
+
+    if exists:
+        with open(expected_path) as fp:
+            data = json.load(fp)
+            return data
+        
+
+    return None
+
+def save_sim_data(seed, count, barriers, data):
+    expected_path = f"data/nepty.{seed:08X}.{count}.{barriers}.json"
+    with open(expected_path, "w+") as fp:
+        json.dump(data, fp)
+
 # ALLOW_MISTAKES=False
 ALLOW_MISTAKES=True
  
@@ -1561,72 +1580,97 @@ def main():
 
 
     process_count = 8
-    sim_count = 0x2000
+    sim_count = 0x100
     max_turns_allowed = 32
     
     print(f"Starting Nepty Sim, {sim_count * process_count} runs over {process_count} processes ...")
     
-    # fig, axes = plt.subplots(3, 2)
+    fig, axes = plt.subplots(3, 2, sharex=True, sharey=True)
 
-    # for turns_between_barriers in range(1, 6 + 1):
-            
-
-    pool = Pool(processes=process_count)
-    args = [
-        [
-            seed + k * sim_count,
-            sim_count,
-            turns_between_barriers,
-            max_turns_allowed
-        ]
-        for k in range(8)
-    ]
-    results = pool.starmap(run_sim_avalanche, args)
-    pool.close()
-            
-    end = time.time()
     
-    total_wins = 0
-    total_losses = 0
-    total_turn_array = [0 for _ in range(max_turns_allowed)]
-
-    for [wins, losses, turn_array] in results:
-        total_wins += wins
-        total_losses += losses
+    # fig.suptitle(f"JP Nepty with Avalanche - {success_rate:.2f} Success Rate, {sim_count * process_count} seeds")
+    
+    # plt.grid(axis='x', which='both', linestyle='--', linewidth=0.5)
+    # plt.grid(axis='y', which='both', linestyle='--', linewidth=0.5)
         
-        for k in range(max_turns_allowed):
-            total_turn_array[k] += int(turn_array[k])
-
-    min_turns = min(total_turn_array)
-    max_turns = max(total_turn_array)
-    success_rate = total_wins / (total_wins + total_losses)
-
-    print(total_wins, total_losses, min_turns, max_turns)
-    print(f"Elapsed: {end-start:.2f}")
-
-    x = [f"{k+1}" for k in range(max_turns_allowed)]
-    y = [turns for turns in total_turn_array]
-    
-    colors = plt.cm.hsv(np.linspace(0.5, 0.0, max_turns_allowed))
-    
-    plt.bar(x, y, color=colors, edgecolor='black', width=1)
-    
-    plt.xlabel("Number of Turns")
-    plt.ylabel("Frequency")
-    
     plt.xticks(range(1, max_turns_allowed+1))
     
-    plt.grid(axis='x', which='both', linestyle='--', linewidth=0.5)
-    plt.grid(axis='y', which='both', linestyle='--', linewidth=0.5)
+    fig.align_labels(axes)
 
-    # seaborn.barplot(total_turn_array)
+    # fig.subplots_adjust(top=0.88)
+    # fig.tight_layout()
 
-    plt.title(f"JP Nepty with Avalanche - {success_rate:.2f} Success Rate, {sim_count * process_count} seeds")
-    
-    
+    for turns_between_barriers in range(1, 6 + 1):
+
+        sim_data = get_sim_data(seed, sim_count, turns_between_barriers)
+        if sim_data is None:
+                
+            pool = Pool(processes=process_count)
+            args = [
+                [
+                    seed + k * sim_count,
+                    sim_count,
+                    max_turns_allowed,
+                    turns_between_barriers,
+                ]
+                for k in range(8)
+            ]
+            results = pool.starmap(run_sim_avalanche, args)
+            pool.close()
+
+            total_wins = 0
+            total_losses = 0
+            total_turn_array = [0 for _ in range(max_turns_allowed)]
+
+            for [wins, losses, turn_array] in results:
+                total_wins += wins
+                total_losses += losses
+                
+                for k in range(max_turns_allowed):
+                    total_turn_array[k] += int(turn_array[k])
+            
+            sim_data = [total_wins, total_losses, total_turn_array]
+            save_sim_data(seed, sim_count, turns_between_barriers, [total_wins, total_losses, total_turn_array])
+
+        # Use this to plot everything
+        #
+        [total_wins, total_losses, total_turn_array] = sim_data
+
+        end = time.time()
+
+        min_turns = min(total_turn_array)
+        max_turns = max(total_turn_array)
+        success_rate = total_wins / (total_wins + total_losses)
+
+        print(total_wins, total_losses, min_turns, max_turns)
+        print(f"Elapsed: {end-start:.2f}")
+
+        x = [f"{k+1}" for k in range(max_turns_allowed)]
+        y = [turns for turns in total_turn_array]
+        
+        colors = plt.cm.hsv(np.linspace(0.5, 0.0, max_turns_allowed))
+
+        sub_x = (turns_between_barriers-1) % 3
+        sub_y = (turns_between_barriers-1) // 3
+
+        subplot = axes[sub_x, sub_y]
+        
+        subplot.bar(x, y, color=colors, edgecolor='black', width=1)
+        
+        subplot.grid(axis='x', which='both', linestyle='--', linewidth=0.5)
+        subplot.grid(axis='y', which='both', linestyle='--', linewidth=0.5)
+
+        # seaborn.barplot(total_turn_array)
+
+
+
+        if turns_between_barriers == 1:
+            subplot.set_title(f"Every Other Turn, {100*success_rate:.2f} % Wins")
+        else:
+            subplot.set_title(f"Every {turns_between_barriers} Turns, {100*success_rate:.2f} % Wins")
+
+    plt.suptitle(f"JP Nepty with Simulated Barrier Strategies -- {sim_count * process_count} runs each")
     plt.show()
-
-
 
 
 
