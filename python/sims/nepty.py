@@ -1580,7 +1580,7 @@ def main():
 
 
     process_count = 8
-    sim_count = 0x100
+    sim_count = 0x20000
     max_turns_allowed = 32
     
     print(f"Starting Nepty Sim, {sim_count * process_count} runs over {process_count} processes ...")
