@@ -126,7 +126,7 @@ def simulate_projectile_init(brian: Brian, enemy: Enemy, p: Projectile, spell: S
     p.z = bz
     
     p.target = enemy
-        
+    
     return 
 
 def simulate_projectile_update(brian: Brian, enemy: Enemy, p: Projectile, spell: SpellDefinition):
@@ -167,6 +167,11 @@ def simulate_projectile_update(brian: Brian, enemy: Enemy, p: Projectile, spell:
     p.x += p.vx
     p.y += p.vy
     p.z += p.vz
+    
+    # print(p)
+    # exit(1)
+    
+    # print(p.x, p.y, p.z)
 
 def is_sim_row_accurate(sim_row, real_row, threshold=0.1):
     for k, (simmed, recorded) in enumerate(zip(sim_row, real_row)):
@@ -237,10 +242,10 @@ def test_wind_1_case(data_path, show_plot=False):
     plt.show()
 
 def test_wind_1():
-    test_wind_1_case("./test_data/wind1.pinhead.1.csv", show_plot=False)
+    # test_wind_1_case("./test_data/wind1.pinhead.1.csv", show_plot=False)
     test_wind_1_case("./test_data/wind1.pinhead.2.csv", show_plot=False)
-    test_wind_1_case("./test_data/wind1.pinhead.3.csv", show_plot=False)
-    test_wind_1_case("./test_data/wind1.kobold.1.csv", show_plot=False)
+    # test_wind_1_case("./test_data/wind1.pinhead.3.csv", show_plot=False)
+    # test_wind_1_case("./test_data/wind1.kobold.1.csv", show_plot=False)
 
 def main():
     
