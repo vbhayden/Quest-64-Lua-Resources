@@ -97,13 +97,10 @@ def load_test_data(data_path):
 
 def rotate_vector_with_angle(angle, vector_tuple: Tuple[float, float, float]):
     
-    angle_sin = math.sin(angle);
-    angle_cos = math.cos(angle);
-    
     (x, y, z) = vector_tuple
     
-    rotated_x = (z * angle_sin) - (x * angle_cos);
-    rotated_z = (z * angle_cos) + (x * angle_sin);
+    rotated_x = x * math.cos(-angle) - z * math.sin(-angle)
+    rotated_z = x * math.sin(-angle) + z * math.cos(-angle)
 
     return (rotated_x, y, rotated_z)
 
