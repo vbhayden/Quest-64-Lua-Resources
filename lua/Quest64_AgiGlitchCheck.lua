@@ -14,13 +14,13 @@ local MEM_COMBAT_AGI_LAST_Z = 0x8C430
 
 local MEM_COMBAT_AGI_DISTANCE = 0x7BCA0
 
-GUI_CHAR_WIDTH = 10
-GUI_PADDING_RIGHT = 240 + 60
+local GUI_CHAR_WIDTH = 10
+local GUI_PADDING_RIGHT = 240 + 60
 
-MovementMagnitude = 1
+local MovementMagnitude = 1
 
-MoveEnemy = false
-MoveEnemyIndex = 0
+local MoveEnemy = false
+local MoveEnemyIndex = 0
 
 local analog_x = 0
 local analog_y = 0
@@ -41,34 +41,34 @@ local function Clamp(value, min, max)
     return value
 end
 
-function Round(num, numDecimalPlaces)
+local function Round(num, numDecimalPlaces)
     local mult = 10 ^ (numDecimalPlaces or 0)
     return math.floor(num * mult + 0.5) / mult
 end
 
-function Ternary ( cond , T , F )
+local function Ternary ( cond , T , F )
     if cond then return T else return F end
 end
 
-function GetEnemyCount()
+local function GetEnemyCount()
     return memory.readbyte(MEM_ENEMY_COUNT, "RDRAM")
 end
 
-function GetMapIDs()
+local function GetMapIDs()
     local mapID = memory.readbyte(0x8536B, "RDRAM")
     local subMapID = memory.readbyte(0x8536F, "RDRAM")
 
     return mapID, subMapID
 end
 
-function GetLastCombatPosition()
+local function GetLastCombatPosition()
     local bx = memory.readfloat(MEM_BATTLE_LAST_X, true, "RDRAM")
     local bz = memory.readfloat(MEM_BATTLE_LAST_Z, true, "RDRAM")
 
     return bx, bz
 end
 
-function GetBrianLocation()
+local function GetBrianLocation()
     local brianX = memory.readfloat(MEM_BRIAN_POSITION_X, true, "RDRAM")
     local brianZ = memory.readfloat(MEM_BRIAN_POSITION_Z, true, "RDRAM")
     
@@ -92,44 +92,44 @@ local function GetExpectedCombatAgiXP(possible_last_x_addr, possible_last_z_addr
     return Distance(brian_x, possible_last_x, brian_z, possible_last_z)
 end
 
-function SetBrianLocation(x, z)
+local function SetBrianLocation(x, z)
     
     memory.writefloat(MEM_BRIAN_POSITION_X, x, true, "RDRAM")
     memory.writefloat(MEM_BRIAN_POSITION_Z, z, true, "RDRAM")
 end
 
-function GetBrianDirection()
+local function GetBrianDirection()
     local angleRadians = memory.readfloat(MEM_BRIAN_ROTATION_Y, true, "RDRAM")
     return angleRadians
 end
 
-function SetBrianDirection(angle)
+local function SetBrianDirection(angle)
     memory.writefloat(MEM_BRIAN_ROTATION_Y, angle, true, "RDRAM")
 end
 
-function GetEnemyLocation()
+local function GetEnemyLocation()
     local brianX = memory.readfloat(MEM_ENEMY_POSITION_X + MoveEnemyIndex * 296, true, "RDRAM")
     local brianZ = memory.readfloat(MEM_ENEMY_POSITION_Z + MoveEnemyIndex * 296, true, "RDRAM")
     
     return brianX, brianZ
 end
 
-function GetEnemyDirection()
+local function GetEnemyDirection()
     local angleRadians = memory.readfloat(MEM_ENEMY_ROTATION_Y + MoveEnemyIndex * 296, true, "RDRAM")
     return angleRadians
 end
 
-function SetEnemyLocation(x, z)
+local function SetEnemyLocation(x, z)
     
     memory.writefloat(MEM_ENEMY_POSITION_X + MoveEnemyIndex * 296, x, true, "RDRAM")
     memory.writefloat(MEM_ENEMY_POSITION_Z + MoveEnemyIndex * 296, z, true, "RDRAM")
 end
 
-function SetEnemyDirection(angle)
+local function SetEnemyDirection(angle)
     memory.writefloat(MEM_ENEMY_ROTATION_Y + MoveEnemyIndex * 296, angle, true, "RDRAM")
 end
 
-function TransformDirectionForBrian(x, y, z)
+local function TransformDirectionForBrian(x, y, z)
     -- Direction Notes:
     --
     -- -X = WEST
@@ -160,7 +160,7 @@ function TransformDirectionForBrian(x, y, z)
     return xp, y, zp
 end
 
-function TransformDirectionForEnemy(x, y, z)
+local function TransformDirectionForEnemy(x, y, z)
     local theta = GetEnemyDirection()
 
     local xp = x * math.cos(-theta) - z * math.sin(-theta)
@@ -169,14 +169,14 @@ function TransformDirectionForEnemy(x, y, z)
     return xp, y, zp
 end
 
-function MoveBrianRelative(x, y, z)
+local function MoveBrianRelative(x, y, z)
     local dx, dy, dz = TransformDirectionForBrian(x, y, z)
     local brianX, brianZ = GetBrianLocation()
 
     SetBrianLocation(brianX + dx * MovementMagnitude, brianZ + dz * MovementMagnitude)
 end
 
-function MoveEnemyRelative(x, y, z)
+local function MoveEnemyRelative(x, y, z)
     local dx, dy, dz = TransformDirectionForEnemy(x, y, z)
     local brianX, brianZ = GetEnemyLocation()
 
@@ -253,7 +253,7 @@ local function ClearAnalog()
 end
 
 
-function ProcessKeyboardInput()
+local function ProcessKeyboardInput()
 
     local keys = input.get()
 
@@ -334,17 +334,17 @@ function ProcessKeyboardInput()
     previous_keys = input.get()
 end
 
-function GuiTextWithColor(row_index, text, color)
+local function GuiTextWithColor(row_index, text, color)
     
     local borderWidth = client.borderwidth();
     gui.text(borderWidth + 40, 240 + row_index * 15, text, color)
 end
 
-function GuiText(row_index, text)
+local function GuiText(row_index, text)
     GuiTextWithColor(row_index, text, "white")
 end
 
-function GuiTextRight(row_index, text)
+local function GuiTextRight(row_index, text)
     
     local borderWidth = client.borderwidth();
     local screenWidth = client.screenwidth();
@@ -353,10 +353,10 @@ function GuiTextRight(row_index, text)
     gui.text(resolvedOffset, 20 + row_index * 15, text)
 end
 
-PreviousX = nil
-PreviousZ = nil
+local PreviousX = nil
+local PreviousZ = nil
 
-function GetMovementDelta(x, z)
+local function GetMovementDelta(x, z)
 
     local dx = 0
     local dz = 0
@@ -375,7 +375,7 @@ function GetMovementDelta(x, z)
     return dx, dz
 end
 
-function PrintCombatValues(index)
+local function PrintCombatValues(index)
 
     local start = 0x88188 - 20 * 16
 
@@ -387,15 +387,15 @@ function PrintCombatValues(index)
     end
 end
 
-function GetEnemyCount()
+local function GetEnemyCount()
     return memory.readbyte(0x07C993, "RDRAM")
 end
 
-function IsEncounterActive()
+local function IsEncounterActive()
     return GetEnemyCount() > 0
 end
 
-function GetCombatCenter()
+local function GetCombatCenter()
     local cx = memory.readfloat(MEM_BATTLE_CENTER_X, true, "RDRAM")
     local cz = memory.readfloat(MEM_BATTLE_CENTER_Z, true, "RDRAM")
 
@@ -404,7 +404,7 @@ end
 
 BattleCenters = {}
 
-function AddBattleCenter(x, z)
+local function AddBattleCenter(x, z)
     local new_coord = { x = x, z = z }
     for k, coord in pairs(BattleCenters) do
         if coord.x == new_coord.x and coord.z == new_coord.z then
@@ -415,13 +415,13 @@ function AddBattleCenter(x, z)
     BattleCenters[#BattleCenters+1] = new_coord
 end
 
-function CountUniqueBattleCenters()
+local function CountUniqueBattleCenters()
     return #BattleCenters
 end
 
-BattleDistanceMin = 9999
-BattleDistanceMax = 0
-EncounterWasActive = false
+local BattleDistanceMin = 9999
+local BattleDistanceMax = 0
+local EncounterWasActive = false
 
 while true do
 
@@ -437,18 +437,18 @@ while true do
     local resulting_distance = current_agi_distance + current_combat_agi_distance
     local resulting_xp = math.floor((current_agi_distance + current_combat_agi_distance) / 50)
 
-    GuiText(14, "Agi Glitch Distances:  ")
-    GuiText(15, "-------------------------:  ")
-    GuiText(16, "Current AGI XP: " .. agi_xp)
-    GuiText(17, "Current AGI Progress: " .. Round(current_agi_distance, 2))
-    GuiText(18, "Combat AGI Distance:  " .. Round(current_combat_agi_distance, 2))
-    GuiText(19, "Converted XP:         " .. Round(current_combat_agi_distance / 50, 2))
+    GuiText(16, "Agi Glitch Distances:  ")
+    GuiText(17, "-------------------------:  ")
+    GuiText(18, "Current AGI XP: " .. agi_xp)
+    GuiText(19, "Current AGI Progress: " .. Round(current_agi_distance, 2))
+    GuiText(20, "Combat AGI Distance:  " .. Round(current_combat_agi_distance, 2))
+    GuiText(21, "Converted XP:         " .. Round(current_combat_agi_distance / 50, 2))
     
-    GuiTextWithColor(21, "Resulting AGI Distance: " .. Round(resulting_distance, 2), "cyan")
-    GuiTextWithColor(22, "Resulting AGI XP Bonus: " .. resulting_xp, "cyan")
+    GuiTextWithColor(23, "Resulting AGI Distance: " .. Round(resulting_distance, 2), "cyan")
+    GuiTextWithColor(24, "Resulting AGI XP Bonus: " .. resulting_xp, "cyan")
 
-    GuiTextWithColor(23, "Leftover AGI Distance: " .. Round(resulting_distance % 50, 2), "yellow")
-    GuiTextWithColor(24, "Updated AGI XP: " .. (agi_xp + resulting_xp), "yellow")
+    GuiTextWithColor(25, "Leftover AGI Distance: " .. Round(resulting_distance % 50, 2), "yellow")
+    GuiTextWithColor(26, "Updated AGI XP: " .. (agi_xp + resulting_xp), "yellow")
 
     emu.frameadvance()
 end

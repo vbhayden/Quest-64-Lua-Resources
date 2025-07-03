@@ -125,6 +125,7 @@ local function GetCollisionDistanceToBrian()
 end
 
 local function SimulateRNGCall(rngValue, rollAgainst)
+
     local checkBase = math.floor(rngValue / 0x10000)
     local rollValue = checkBase % rollAgainst
 

@@ -1,33 +1,33 @@
 
-MEM_BRIAN_POSITION_X = 0x7BACC
-MEM_BRIAN_POSITION_Y = 0x7BAD0
-MEM_BRIAN_POSITION_Z = 0x7BAD4
-MEM_BRIAN_ROTATION_Y = 0x7BADC
+local MEM_BRIAN_POSITION_X = 0x7BACC
+local MEM_BRIAN_POSITION_Y = 0x7BAD0
+local MEM_BRIAN_POSITION_Z = 0x7BAD4
+local MEM_BRIAN_ROTATION_Y = 0x7BADC
 
-MEM_ENEMY_POSITION_X = 0x7C9BC
-MEM_ENEMY_POSITION_Y = 0x7C9C0
-MEM_ENEMY_POSITION_Z = 0x7C9C4
-MEM_ENEMY_ROTATION_Y = 0x7C9CC
+local MEM_ENEMY_POSITION_X = 0x7C9BC
+local MEM_ENEMY_POSITION_Y = 0x7C9C0
+local MEM_ENEMY_POSITION_Z = 0x7C9C4
+local MEM_ENEMY_ROTATION_Y = 0x7C9CC
 
-MEM_BATTLE_LAST_X = 0x86B18
-MEM_BATTLE_LAST_Z = 0x86B20
+local MEM_BATTLE_LAST_X = 0x86B18
+local MEM_BATTLE_LAST_Z = 0x86B20
 
-MEM_BATTLE_CENTER_X = 0x880B8
-MEM_BATTLE_CENTER_Z = 0x880D8
+local MEM_BATTLE_CENTER_X = 0x880B8
+local MEM_BATTLE_CENTER_Z = 0x880D8
 
 local MEM_CURRENT_MAP_ID = 0x08536B
 local MEM_CURRENT_SUBMAP_ID = 0x08536F
 
-MEM_ENEMY_COUNT = 0x07C993
+local MEM_ENEMY_COUNT = 0x07C993
 local MEM_SIZE_ENEMY_BLOCK = 0x128
 
-GUI_CHAR_WIDTH = 10
-GUI_PADDING_RIGHT = 240 + 60
+local GUI_CHAR_WIDTH = 10
+local GUI_PADDING_RIGHT = 240 + 60
 
-MovementMagnitude = 1
+local MovementMagnitude = 1
 
-MoveEnemy = false
-MoveEnemyIndex = 0
+local MoveEnemy = false
+local MoveEnemyIndex = 0
 
 local analog_x = 0
 local analog_y = 0
@@ -48,34 +48,38 @@ local function Clamp(value, min, max)
     return value
 end
 
-function Round(num, numDecimalPlaces)
+local function Round(num, numDecimalPlaces)
     local mult = 10 ^ (numDecimalPlaces or 0)
     return math.floor(num * mult + 0.5) / mult
 end
 
-function Ternary ( cond , T , F )
+local function Ternary ( cond , T , F )
     if cond then return T else return F end
 end
 
-function GetEnemyCount()
+local function GetCurrentAgility()
+    return memory.readbyte(0x7BA8D, "RDRAM")
+end
+
+local function GetEnemyCount()
     return memory.read_u16_be(MEM_ENEMY_COUNT, "RDRAM")
 end
 
-function GetMapIDs()
+local function GetMapIDs()
     local mapID = memory.readbyte(MEM_CURRENT_MAP_ID, "RDRAM")
     local subMapID = memory.readbyte(MEM_CURRENT_SUBMAP_ID, "RDRAM")
 
     return mapID, subMapID
 end
 
-function GetLastCombatPosition()
+local function GetLastCombatPosition()
     local bx = memory.readfloat(MEM_BATTLE_LAST_X, true, "RDRAM")
     local bz = memory.readfloat(MEM_BATTLE_LAST_Z, true, "RDRAM")
 
     return bx, bz
 end
 
-function GetBrianLocation()
+local function GetBrianLocation()
     local x = memory.readfloat(MEM_BRIAN_POSITION_X, true, "RDRAM")
     local y = memory.readfloat(MEM_BRIAN_POSITION_Y, true, "RDRAM")
     local z = memory.readfloat(MEM_BRIAN_POSITION_Z, true, "RDRAM")
@@ -83,22 +87,22 @@ function GetBrianLocation()
     return { x=x, y=y, z=z }
 end
 
-function SetBrianLocation(x, z)
+local function SetBrianLocation(x, z)
     
     memory.writefloat(MEM_BRIAN_POSITION_X, x, true, "RDRAM")
     memory.writefloat(MEM_BRIAN_POSITION_Z, z, true, "RDRAM")
 end
 
-function GetBrianDirection()
+local function GetBrianDirection()
     local angleRadians = memory.readfloat(MEM_BRIAN_ROTATION_Y, true, "RDRAM")
     return angleRadians
 end
 
-function SetBrianDirection(angle)
+local function SetBrianDirection(angle)
     memory.writefloat(MEM_BRIAN_ROTATION_Y, angle, true, "RDRAM")
 end
 
-function GetEnemyLocation()
+local function GetEnemyLocation()
     local x = memory.readfloat(MEM_ENEMY_POSITION_X + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, true, "RDRAM")
     local y = memory.readfloat(MEM_ENEMY_POSITION_Y + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, true, "RDRAM")
     local z = memory.readfloat(MEM_ENEMY_POSITION_Z + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, true, "RDRAM")
@@ -106,22 +110,22 @@ function GetEnemyLocation()
     return { x=x, y=y, z=z }
 end
 
-function GetEnemyDirection()
+local function GetEnemyDirection()
     local angleRadians = memory.readfloat(MEM_ENEMY_ROTATION_Y + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, true, "RDRAM")
     return angleRadians
 end
 
-function SetEnemyLocation(x, y, z)
+local function SetEnemyLocation(x, y, z)
     memory.writefloat(MEM_ENEMY_POSITION_X + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, x, true, "RDRAM")
     memory.writefloat(MEM_ENEMY_POSITION_Y + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, y, true, "RDRAM")
     memory.writefloat(MEM_ENEMY_POSITION_Z + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, z, true, "RDRAM")
 end
 
-function SetEnemyDirection(angle)
+local function SetEnemyDirection(angle)
     memory.writefloat(MEM_ENEMY_ROTATION_Y + MoveEnemyIndex * MEM_SIZE_ENEMY_BLOCK, angle, true, "RDRAM")
 end
 
-function TransformDirectionForBrian(x, y, z)
+local function TransformDirectionForBrian(x, y, z)
     -- Direction Notes:
     --
     -- -X = WEST
@@ -152,7 +156,7 @@ function TransformDirectionForBrian(x, y, z)
     return xp, y, zp
 end
 
-function TransformDirectionForEnemy(x, y, z)
+local function TransformDirectionForEnemy(x, y, z)
     local theta = GetEnemyDirection()
 
     local xp = x * math.cos(-theta) - z * math.sin(-theta)
@@ -161,14 +165,15 @@ function TransformDirectionForEnemy(x, y, z)
     return xp, y, zp
 end
 
-function MoveBrianRelative(x, y, z)
+local function MoveBrianRelative(x, y, z)
+    console.log(x .. ", " .. y .. ", " .. z)
     local dx, dy, dz = TransformDirectionForBrian(x, y, z)
     local coord = GetBrianLocation()
 
     SetBrianLocation(coord.x + dx * MovementMagnitude, coord.z + dz * MovementMagnitude)
 end
 
-function MoveEnemyRelative(x, y, z)
+local function MoveEnemyRelative(x, y, z)
     local dx, dy, dz = TransformDirectionForEnemy(x, y, z)
     local coord = GetEnemyLocation()
 
@@ -249,7 +254,7 @@ local function ClearAnalog()
 end
 
 
-function ProcessKeyboardInput()
+local function ProcessKeyboardInput()
 
     local keys = input.get()
 
@@ -337,17 +342,17 @@ function ProcessKeyboardInput()
     previous_keys = input.get()
 end
 
-function GuiTextWithColor(row_index, text, color)
+local function GuiTextWithColor(row_index, text, color)
     
     local borderWidth = client.borderwidth();
     gui.text(borderWidth + 40, 240 + row_index * 15, text, color)
 end
 
-function GuiText(row_index, text)
+local function GuiText(row_index, text)
     GuiTextWithColor(row_index, text, "white")
 end
 
-function GuiTextRight(row_index, text)
+local function GuiTextRight(row_index, text)
     
     local borderWidth = client.borderwidth();
     local screenWidth = client.screenwidth();
@@ -356,10 +361,10 @@ function GuiTextRight(row_index, text)
     gui.text(resolvedOffset, 20 + row_index * 15, text)
 end
 
-PreviousX = nil
-PreviousZ = nil
+local PreviousX = nil
+local PreviousZ = nil
 
-function GetMovementDelta(x, z)
+local function GetMovementDelta(x, z)
 
     local dx = 0
     local dz = 0
@@ -378,7 +383,7 @@ function GetMovementDelta(x, z)
     return dx, dz
 end
 
-function PrintCombatValues(index)
+local function PrintCombatValues(index)
 
     local start = 0x88188 - 20 * 16
 
@@ -390,20 +395,20 @@ function PrintCombatValues(index)
     end
 end
 
-function IsEncounterActive()
+local function IsEncounterActive()
     return GetEnemyCount() > 0
 end
 
-function GetCombatCenter()
+local function GetCombatCenter()
     local cx = memory.readfloat(MEM_BATTLE_CENTER_X, true, "RDRAM")
     local cz = memory.readfloat(MEM_BATTLE_CENTER_Z, true, "RDRAM")
 
     return cx, cz
 end
 
-BattleCenters = {}
+local BattleCenters = {}
 
-function AddBattleCenter(x, z)
+local function AddBattleCenter(x, z)
     local new_coord = { x = x, z = z }
     for k, coord in pairs(BattleCenters) do
         if coord.x == new_coord.x and coord.z == new_coord.z then
@@ -414,13 +419,13 @@ function AddBattleCenter(x, z)
     BattleCenters[#BattleCenters+1] = new_coord
 end
 
-function CountUniqueBattleCenters()
+local function CountUniqueBattleCenters()
     return #BattleCenters
 end
 
-BattleDistanceMin = 9999
-BattleDistanceMax = 0
-EncounterWasActive = false
+local BattleDistanceMin = 9999
+local BattleDistanceMax = 0
+local EncounterWasActive = false
 
 while true do
 
@@ -497,10 +502,13 @@ while true do
         analog_y = 0
     end
 
-    GuiText(13, "Agi Dist:  " .. Round(combat_dist, 2))
+    local agility = GetCurrentAgility()
 
-    GuiText(15, "Map ID:  " .. map)
-    GuiText(16, "Sub Map: " .. submap)
+    GuiText(13, "Agility:   " .. agility)
+    GuiText(14, "Agi Dist:  " .. Round(combat_dist, 2))
+
+    GuiText(16, "Map ID:  " .. map)
+    GuiText(17, "Sub Map: " .. submap)
 
     -- GuiTextRight(5, "Unique Centers: " .. CountUniqueBattleCenters())
     -- GuiTextRight(6, "Battle Dist: " .. Round(center_dist, 2))

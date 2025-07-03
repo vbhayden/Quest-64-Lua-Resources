@@ -16,6 +16,13 @@ local MEM_CAMERA_ROTATION_X = 0x86DE4
 local MEM_CAMERA_ROTATION_Y = 0x86DE8
 local MEM_CAMERA_ROTATION_Z = 0x86DEC
 
+local MEM_CAMERA_VERTICAL_OFFSET = 0x86E1C
+local MEM_CAMERA_LOCAL_ELEVATION = 0x86E18
+local MEM_CAMERA_FOCUS_DISTANCE = 0x86E0C
+local MEM_CAMERA_FOV_DEGREES = 0x86EC8
+local MEM_CAMERA_NEAR_CLIP_DISTANCE = 0x86ECC
+local MEM_CAMERA_FAR_CLIP_DISTANCE = 0x86ED0
+
 local MEM_BATTLE_LAST_X = 0x86B18
 local MEM_BATTLE_LAST_Z = 0x86B20
 
@@ -194,18 +201,45 @@ while true do
     GuiTextRight(7, "X: " .. Round(camera_transform.x, 2))
     GuiTextRight(8, "Y: " .. Round(camera_transform.y, 2))
     GuiTextRight(9, "X: " .. Round(camera_transform.z, 2))
-
-    GuiTextRight(11, "Radians X: " .. Round(camera_transform.rx, 3))
-    GuiTextRight(12, "Radians Y: " .. Round(camera_transform.ry, 3))
-    GuiTextRight(13, "Radians Z: " .. Round(camera_transform.rz, 3))
     
-    GuiTextRight(15, "Angle X: " .. Round(angle_x, 3))
-    GuiTextRight(16, "Angle Y: " .. Round(angle_y, 3))
-    GuiTextRight(17, "Angle Z: " .. Round(angle_z, 3))
-    
-    GuiTextRight(19, "Brian Dist: " .. Round(camera_distance, 3))
-    GuiTextRight(20, "Focus Dist: " .. Round(focus_distance, 3))
+    GuiTextRight(11, "Focus Info: ")
+    GuiTextRight(12, "X: " .. Round(camera_transform.tx, 2))
+    GuiTextRight(13, "Y: " .. Round(camera_transform.ty, 2))
+    GuiTextRight(14, "X: " .. Round(camera_transform.tz, 2))
 
+    GuiTextRight(16, "Radians X: " .. Round(camera_transform.rx, 3))
+    GuiTextRight(17, "Radians Y: " .. Round(camera_transform.ry, 3))
+    GuiTextRight(18, "Radians Z: " .. Round(camera_transform.rz, 3))
+    
+    GuiTextRight(20, "Angle X: " .. Round(angle_x, 3))
+    GuiTextRight(21, "Angle Y: " .. Round(angle_y, 3))
+    GuiTextRight(22, "Angle Z: " .. Round(angle_z, 3))
+    
+    GuiTextRight(24, "Brian Dist: " .. Round(camera_distance, 3))
+    GuiTextRight(25, "Focus Dist: " .. Round(focus_distance, 3))
+    
+    local vertical_offset = memory.readfloat(MEM_CAMERA_VERTICAL_OFFSET, true, "RDRAM")
+    local local_elevation = memory.readfloat(MEM_CAMERA_LOCAL_ELEVATION, true, "RDRAM")
+    local focus_distance = memory.readfloat(MEM_CAMERA_FOCUS_DISTANCE, true, "RDRAM")
+    local fov_degrees = memory.readfloat(MEM_CAMERA_FOV_DEGREES, true, "RDRAM")
+    local near_clip = memory.readfloat(MEM_CAMERA_NEAR_CLIP_DISTANCE, true, "RDRAM")
+    local far_clip = memory.readfloat(MEM_CAMERA_FAR_CLIP_DISTANCE, true, "RDRAM")
+
+    GuiTextRight(27, "Unity Settings: ")
+    GuiTextRight(28, " - Focus Height: " .. Round(vertical_offset, 2))
+    GuiTextRight(29, " - Local Elevation: " .. Round(local_elevation, 2))
+    GuiTextRight(30, " - Focus Distance: " .. Round(focus_distance, 2))
+    GuiTextRight(31, " - FOV Degrees: " .. Round(fov_degrees, 2))
+    GuiTextRight(32, " - Near Clip: " .. Round(near_clip, 2))
+    GuiTextRight(33, " - Far Clip: " .. Round(far_clip, 2))
+
+    -- local MEM_CAMERA_VERTICAL_OFFSET = 0x86E1C
+    -- local MEM_CAMERA_LOCAL_ELEVATION = 0x86E18
+    -- local MEM_CAMERA_FOCUS_DISTANCE = 0x86E0C
+    -- local MEM_CAMERA_FOV_DEGREES = 0x86EC8
+    -- local MEM_CAMERA_NEAR_CLIP_DISTANCE = 0x86ECC
+    -- local MEM_CAMERA_FAR_CLIP_DISTANCE = 0x86ED0
+    
     ProcessKeyboardInput()
 
     emu.frameadvance()

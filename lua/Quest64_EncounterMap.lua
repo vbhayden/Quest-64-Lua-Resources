@@ -11,18 +11,18 @@
 -- appear on the right of your screen.
 --
 --
---
+-- 
 -- Encounter Map Config Values
 --
 -- These values will adjust how the map appears 
 -- and can be edited without issue, although some
 -- values will require a specific type etc.
 --
-local MAP_GRID_WIDTH = 18
+local MAP_GRID_WIDTH = 14
 local MAP_GRID_HEIGHT = 11
 local MAP_GRID_UNIT_SPACING = 5
-local MAP_ANCHOR_X = 40
-local MAP_ANCHOR_Y = 30
+local MAP_ANCHOR_X = 2
+local MAP_ANCHOR_Y = 20
 
 -- Color Config
 --
