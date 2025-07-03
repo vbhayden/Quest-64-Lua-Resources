@@ -294,6 +294,8 @@ def plot_map(map_data: MapData):
     plt.xlim([min(xs) - width/20, max(xs) + width/20])
     plt.ylim([min(zs) - height/20, max(zs) + height/20])
     
+    plt.axis('scaled')
+    
     ax = plt.gca()
     ax.set_ylim(ax.get_ylim()[::-1])  # Reverse the Y-axis
     
@@ -303,7 +305,8 @@ def plot_map(map_data: MapData):
         xs = [vert["x"] for vert in block]
         zs = [vert["z"] for vert in block]
         
-        plt.plot(xs, zs, color="black", lw="1")
+        # plt.plot(xs, zs, color="black", lw="1")
+        plt.plot(xs, zs, lw="1")
         
     # Regions 
     for region in map_data.regions:        
@@ -312,7 +315,7 @@ def plot_map(map_data: MapData):
         
     # Circles 
     for circle in map_data.circles:        
-        circle = patches.Circle((circle["x"], circle["z"]), radius=90, color="r", fill=False)
+        circle = patches.Circle((circle["x"], circle["z"]), radius=90, color="#AA000022", fill=False)
         ax.add_patch(circle)
         
     icon_chest = np.asarray(Image.open("icons/icon-chest.png"))
@@ -327,18 +330,18 @@ def plot_map(map_data: MapData):
 
         ax.add_artist(ab)
         
-    for chest in map_data.chests:    
-        sx = chest["x"]  
-        sz = chest["z"]  
+    # for chest in map_data.chests:    
+    #     sx = chest["x"]  
+    #     sz = chest["z"]  
         
-        imagebox = OffsetImage(icon_chest, zoom=0.4)
-        ab = AnnotationBbox(imagebox, (sx, sz), frameon=False, xycoords='data')
+    #     imagebox = OffsetImage(icon_chest, zoom=0.4)
+    #     ab = AnnotationBbox(imagebox, (sx, sz), frameon=False, xycoords='data')
 
-        ax.add_artist(ab)
+    #     ax.add_artist(ab)
     
     fig = plt.gcf()
-    fig.set_dpi(100)
-    fig.set_size_inches(base_height * size_ratio, base_height)
+    # fig.set_dpi(1000)
+    # fig.set_size_inches(base_height * size_ratio, base_height)
     fig.savefig("check.png")
     
     plt.show()
@@ -388,8 +391,9 @@ def main():
     # geometry_path = sys.argv[1]
     # # find_oob_angles(geometry_path)
 
-    # mapdata_path = sys.argv[1]
-    # mapdata = MapData.load_from_path(mapdata_path)
+    mapdata_path = sys.argv[1]
+    mapdata = MapData.load_from_path(mapdata_path)
+    plot_map(mapdata)
     
     # density_path = mapdata_path + ".density"
     
@@ -407,7 +411,7 @@ def main():
     
     # plot_map(mapdata)
     
-    generate_all_mapping_data("../lua/data")
+    # generate_all_mapping_data("../lua/data")
 
 if __name__ == "__main__":
     main()
