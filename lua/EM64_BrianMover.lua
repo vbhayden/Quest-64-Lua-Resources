@@ -197,7 +197,7 @@ local function WriteCrumbCSV(path)
 end
 
 local last_bx = 0
-local last_bx = 0
+local last_bz = 0
 local min_crumb_distance = 5
 
 local function ReadCrumbs()

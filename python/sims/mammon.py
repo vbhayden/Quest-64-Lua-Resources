@@ -12,14 +12,25 @@ BRIAN_X = 78.32734
 BRIAN_Y = 109.8082
 BRIAN_Z = -326.8355
 
-BRIAN_HP = 208
-BRIAN_MP = 25
-BRIAN_AGILITY = 26
-BRIAN_DEFENSE = 26
-BRIAN_FIRE = 1
+# BRIAN_HP = 208
+# BRIAN_MP = 25
+# BRIAN_AGILITY = 26
+# BRIAN_DEFENSE = 26
+# BRIAN_FIRE = 1
+# BRIAN_EARTH = 50
+# BRIAN_WATER = 44
+# BRIAN_WIND = 1
+# BRIAN_STAFF_POWER = 16
+# TOTAL_ELEMENTS = BRIAN_FIRE + BRIAN_EARTH + BRIAN_WATER + BRIAN_WIND
+
+BRIAN_HP = 146
+BRIAN_MP = 19
+BRIAN_AGILITY = 99
+BRIAN_DEFENSE = 10
+BRIAN_FIRE = 4
 BRIAN_EARTH = 50
-BRIAN_WATER = 44
-BRIAN_WIND = 1
+BRIAN_WATER = 49
+BRIAN_WIND = 37
 BRIAN_STAFF_POWER = 16
 TOTAL_ELEMENTS = BRIAN_FIRE + BRIAN_EARTH + BRIAN_WATER + BRIAN_WIND
 
@@ -187,6 +198,8 @@ a_240=0x3BE331C1
 c_240=0xDEA2B5D0
 a_90=0x9E7E03C9
 c_90=0x948784C6
+a_32=0x8B2E1481
+c_32=0x642B7E60
 a_31=0xF53981E5
 c_31=0x0202A263
 a_30=0x4E6A7659
@@ -213,6 +226,10 @@ def advance_rng_240(current_rng) -> int:
 @njit
 def advance_rng_90(current_rng) -> int:
     return (current_rng * a_90 + c_90) & 0xFFFFFFFF
+
+@njit
+def advance_rng_32(current_rng) -> int:
+    return (current_rng * a_32 + c_32) & 0xFFFFFFFF
 
 @njit
 def advance_rng_31(current_rng) -> int:
@@ -592,24 +609,24 @@ def simulate_brian_melee(seed, weakness_active=False):
         return False, 0, agility_seed
 
     total_elements = TOTAL_ELEMENTS
-    influence = math.floor(total_elements * 1.5)
+    power = math.floor(total_elements * 1.5)
     
-    reduction_threshold = total_elements >> 2
-    attack_reduction = 0
+    balance_cutoff = total_elements >> 2
+    penalty = 0
+    
+    if BRIAN_FIRE > balance_cutoff:
+        penalty += BRIAN_FIRE - balance_cutoff
+    
+    if BRIAN_EARTH > balance_cutoff:
+        penalty += BRIAN_EARTH - balance_cutoff
+    
+    if BRIAN_WATER > balance_cutoff:
+        penalty += BRIAN_WATER - balance_cutoff
+    
+    if BRIAN_WIND > balance_cutoff:
+        penalty += BRIAN_WIND - balance_cutoff
 
-    if ELEMENT_FIRE > reduction_threshold:
-        attack_reduction += ELEMENT_FIRE - reduction_threshold
-    
-    if ELEMENT_EARTH > reduction_threshold:
-        attack_reduction += ELEMENT_EARTH - reduction_threshold
-    
-    if ELEMENT_WATER > reduction_threshold:
-        attack_reduction += ELEMENT_WATER - reduction_threshold
-    
-    if ELEMENT_WIND > reduction_threshold:
-        attack_reduction += ELEMENT_WIND - reduction_threshold
-
-    spirit_influence = influence - attack_reduction
+    spirit_influence = power - penalty
     attack_power = (spirit_influence * BRIAN_STAFF_POWER) >> 4
     enemy_defense = MAMMON_DEFENSE
     if weakness_active:
@@ -951,6 +968,9 @@ def sim_mammon_randomly(seed, max_turns):
                 barrier_turns=brian_buffs[0]
             )
             
+        if mammon_debuffs[0] > 0:
+            mammon_debuffs[0] -= 1
+            
         if brian_stats[0] <= 0:
             return False, turns + 1, decision_result
         
@@ -968,10 +988,10 @@ def sim_bulk(starting_seed, exits, heals, sim_count, max_turns=16):
     seed = starting_seed
     
     for exit_casts in range(exits):
-        seed = advance_rng_30(seed)
+        seed = advance_rng_31(seed)
         
     for exit_casts in range(heals):
-        seed = advance_rng_31(seed)
+        seed = advance_rng_32(seed)
         
     for k in range(sim_count):
         
@@ -1008,7 +1028,7 @@ def increment_against_hex_cap(current: np.longlong, hex_cap: np.longlong) -> np.
     
     return current + increment
 
-@njit()
+# @njit()
 def sim_mammon_brute_force(seed: int, decision_codes: np.longlong, max_turns=16):
     
     brian_stats = [BRIAN_HP, BRIAN_MP]
@@ -1026,7 +1046,7 @@ def sim_mammon_brute_force(seed: int, decision_codes: np.longlong, max_turns=16)
         decision_code = (decision_codes >> turns * 4) % 16
         iter_seed = simulate_brian_turn_explicit(combat_seed, decision_code, turns >= CANNOT_ATTACK_UNTIL, brian_stats, brian_buffs, mammon_stats, mammon_debuffs)
         
-        # print(f"{combat_seed:8X}->{iter_seed:8X}", decision_code, get_decision_text(decision_code), brian_stats, brian_buffs, mammon_stats)
+        print(f"{combat_seed:8X}->{iter_seed:8X}", decision_code, get_decision_text(decision_code), brian_stats, brian_buffs, mammon_stats)
         
         if mammon_stats[0] < 0:
             mammon_stats[0] = 0
@@ -1039,6 +1059,9 @@ def sim_mammon_brute_force(seed: int, decision_codes: np.longlong, max_turns=16)
         if mammon_stats[0] > 0:
             iter_seed, damage = simulate_mammon_turn(iter_seed, brian_stats, brian_buffs, brian_buffs[0])
         
+        if mammon_debuffs[0] > 0:
+            mammon_debuffs[0] -= 1
+            
         turns += 1
         combat_seed = iter_seed
 
@@ -1106,12 +1129,12 @@ def run_sim_brute_force(starting_seed, decision_cap, heal_variance, exit_varianc
             
             advanced_seed = starting_seed
             for _ in range(heals):
-                advanced_seed = advance_rng_31(advanced_seed)
+                advanced_seed = advance_rng_32(advanced_seed)
             for _ in range(exits):
-                advanced_seed = advance_rng_30(advanced_seed)
+                advanced_seed = advance_rng_31(advanced_seed)
             
             turns, decisions = sim_bulk_brute_force(advanced_seed, decision_cap, max_turns)
-            if turns < best_turns:
+            if turns < best_turns or ((turns == best_turns) and ((heals + exits) < (heal_count + exit_count))):
                 best_turns = turns
                 decision_result = decisions
                 heal_count = heals
@@ -1198,15 +1221,17 @@ def test():
     test_mammon_turn()
     
 def main():
-    test()
-    return
+    # test()
+    # return
     
     from multiprocessing import Pool
     
     # test()
     start = time.time()
     
-    seed = 0x084C487C
+    # seed = 0x084C487C
+    seed = 0xEB0B64F2
+    # seed = 0x9C954C28
     
     # success, turns, decisions = sim_mammon_randomly(seed, 20)
     # print(f"{seed:8X}--------") 
@@ -1215,9 +1240,9 @@ def main():
     #     decision_code = (decisions >> turn * 4) % 16
     #     print(decision_code, get_decision_text(decision_code))
     
-    heal_range = 13
-    exit_range = 13
-    sim_count = 100
+    heal_range = 6
+    exit_range = 6
+    sim_count = 1000
     max_turns = 12
     
     # (heals, exits, turns, decisions) = run_sim(seed, sim_count, heal_range, exit_range, max_turns=16)
@@ -1256,9 +1281,9 @@ def main():
 
     advanced_seed = seed
     for _ in range(heals):
-        advanced_seed = advance_rng_31(advanced_seed)
+        advanced_seed = advance_rng_32(advanced_seed)
     for _ in range(exits):
-        advanced_seed = advance_rng_30(advanced_seed)
+        advanced_seed = advance_rng_31(advanced_seed)
         
     print(f"{seed:8X} -> {advanced_seed:8X}")
     print(f"{turns=} {heals=} {exits=}")

@@ -12,14 +12,28 @@ BRIAN_X = np.float32(-4.4)
 BRIAN_Y = np.float32(50.0)
 BRIAN_Z = np.float32(-99.89819)
 
-BRIAN_HP = 158
-BRIAN_MP = 24
-BRIAN_AGILITY = 24
-BRIAN_DEFENSE = 24
+BRIAN_X_ALT = np.float32(4.4)
+BRIAN_Y_ALT = np.float32(50.0)
+BRIAN_Z_ALT = np.float32(-99.89404)
+
+# BRIAN_HP = 158
+# BRIAN_MP = 24
+# BRIAN_AGILITY = 24
+# BRIAN_DEFENSE = 24
+# BRIAN_FIRE = 1
+# BRIAN_EARTH = 50
+# BRIAN_WATER = 38
+# BRIAN_WIND = 1
+
+BRIAN_HP = 95
+BRIAN_MP = 18
+BRIAN_AGILITY = 97
+BRIAN_DEFENSE = 8
 BRIAN_FIRE = 1
 BRIAN_EARTH = 50
-BRIAN_WATER = 38
-BRIAN_WIND = 1
+BRIAN_WATER = 44
+BRIAN_WIND = 37
+
 BRIAN_STAFF_POWER = 16
 TOTAL_ELEMENTS = BRIAN_FIRE + BRIAN_EARTH + BRIAN_WATER + BRIAN_WIND
 
@@ -60,6 +74,9 @@ DECISION_MELEE = 6
 DECISION_WATER_1 = 7
 DECISION_ROCK_1 = 8
 DECISION_PASS = 9
+DECISION_DRAIN_MAGIC = 0xA
+DECISION_AVALANCHE_ALT = 0xB
+DECISION_EVADE_2 = 0xC
 
 decision_map = {
     DECISION_BARRIER: "Barrier",
@@ -72,6 +89,9 @@ decision_map = {
     DECISION_WATER_1: "Water 1",
     DECISION_ROCK_1: "Rock 1",
     DECISION_PASS: "Pass",
+    DECISION_DRAIN_MAGIC: "Drain Magic",
+    DECISION_AVALANCHE_ALT: "Avalanche ALT",
+    DECISION_EVADE_2: "Evade Lvl. 2",
 }
 
 def get_decision_text(decision_code):
@@ -375,12 +395,12 @@ def does_rock_overlap_guilty(rock_x, rock_y, rock_z, guilty_x, guilty_z):
     return radial_sum > elliptical_distance
 
 @njit()
-def simulate_avalanche_rock_hit(seed: int, weakness_active) -> Tuple[bool, int, int]:
+def simulate_avalanche_rock_hit(seed: int, weakness_active, brian_agi: int) -> Tuple[bool, int, int]:
     
     accuracy_seed = next_rng(seed)    
     agility_seed = next_rng(accuracy_seed)
     
-    hit_chance = calculate_hit_chance(BRIAN_AGILITY, GUILTY_AGILITY)
+    hit_chance = calculate_hit_chance(brian_agi, GUILTY_AGILITY)
     hit_roll = roll_rng(agility_seed, 100)
     
     if hit_roll >= hit_chance:
@@ -396,7 +416,7 @@ def simulate_avalanche_rock_hit(seed: int, weakness_active) -> Tuple[bool, int, 
     return True, damage, damage_seed
 
 @njit()
-def simulate_avalanche(seed: int, guilty_x, guilty_z, weakness_active=False, debug=False):
+def simulate_avalanche(seed: int, brian_x, brian_y, brian_z, brian_agi, guilty_x, guilty_z, weakness_active=False, debug=False):
     rock_overlaps = 0
     rock_hits = 0
     total_damage = 0
@@ -466,9 +486,9 @@ def simulate_avalanche(seed: int, guilty_x, guilty_z, weakness_active=False, deb
             angle = angle_roll * 22.5 * math.pi / 180.0
             offset = 20 + offset_roll
 
-            rock_x = BRIAN_X - offset * math.sin(angle)
-            rock_y = BRIAN_Y + AVALANCHE_ROCK_INITIAL_HEIGHT
-            rock_z = BRIAN_Z - offset * math.cos(angle)
+            rock_x = brian_x - offset * math.sin(angle)
+            rock_y = brian_y + AVALANCHE_ROCK_INITIAL_HEIGHT
+            rock_z = brian_z - offset * math.cos(angle)
             
             rock_coords[rocks_released] = [rock_x, rock_y, rock_z]
             rocks_released += 1
@@ -480,7 +500,7 @@ def simulate_avalanche(seed: int, guilty_x, guilty_z, weakness_active=False, deb
                 if collision_state == COLLISION_QUEUED:
                     rock_overlaps += 1
                     
-                    hit, damage, final_seed = simulate_avalanche_rock_hit(seed, weakness_active)
+                    hit, damage, final_seed = simulate_avalanche_rock_hit(seed, weakness_active, brian_agi)
                     if hit:
                         rock_hits += 1
                         total_damage += damage
@@ -527,7 +547,20 @@ def simulate_confusion(seed):
     return True, hit_roll, turns, advance_rng_30(turn_seed)
 
 @njit()
-def simulate_weakness(seed):
+def simulate_evade_2(seed):
+
+    hit_seed = next_rng(seed)
+    hit_roll = roll_rng(hit_seed, 100)
+    if hit_roll >= 90:
+        return False, hit_roll, 0, advance_rng_30(hit_seed)
+    
+    turn_seed = next_rng(hit_seed)
+    turns = 2 + roll_rng(turn_seed, 5)
+    
+    return True, hit_roll, turns, turn_seed
+
+@njit()
+def simulate_weakness(seed, brian_agi: int):
     
     hit_seed = next_rng(seed)
     hit_roll = roll_rng(hit_seed, 100)
@@ -535,7 +568,7 @@ def simulate_weakness(seed):
         return False, hit_roll, 0, advance_rng_30(hit_seed)
     
     agility_seed = next_rng(hit_seed)
-    agility_chance = calculate_hit_chance(BRIAN_AGILITY, GUILTY_AGILITY)
+    agility_chance = calculate_hit_chance(brian_agi, GUILTY_AGILITY)
     agility_roll = roll_rng(agility_seed, 100)
     
     if agility_roll >= agility_chance:
@@ -554,7 +587,7 @@ def simulate_weakness(seed):
     return True, status_roll, turns, advance_rng_30(turn_seed)
 
 @njit()
-def simulate_generic_damaging_spell(seed, element, spell_power, weakness_active=False):
+def simulate_generic_damaging_spell(seed, element, spell_power, brian_agi: int, weakness_active=False):
     
     accuracy_seed = next_rng(seed)
     accuracy_roll = roll_rng(accuracy_seed, 100)
@@ -578,18 +611,35 @@ def simulate_generic_damaging_spell(seed, element, spell_power, weakness_active=
     return True, damage, damage_seed
 
 @njit()
-def simulate_water_1(seed, weakness_active=False):
+def simulate_water_1(seed, brian_agi: int, weakness_active=False):
     particle_seed = advance_rng_30(seed)
-    return simulate_generic_damaging_spell(particle_seed, ELEMENT_WATER, SPELL_POWER_WATER_1, weakness_active)
+    return simulate_generic_damaging_spell(particle_seed, ELEMENT_WATER, SPELL_POWER_WATER_1, brian_agi, weakness_active)
 
 @njit()
-def simulate_rock_1(seed, weakness_active=False):
-    return simulate_generic_damaging_spell(seed, ELEMENT_EARTH, SPELL_POWER_ROCK_1, weakness_active)
+def simulate_rock_1(seed, brian_agi: int, weakness_active=False):
+    return simulate_generic_damaging_spell(seed, ELEMENT_EARTH, SPELL_POWER_ROCK_1, brian_agi, weakness_active)
 
 @njit()
-def simulate_brian_melee(seed, weakness_active=False):
+def simulate_drain_magic(seed, brian_agi: int):
+    
+    accuracy_seed = next_rng(seed)
+    accuracy_roll = roll_rng(accuracy_seed, 100)
+    if accuracy_roll >= 70:
+        return False, 0, advance_rng_30(accuracy_seed)
+    
+    hit_seed = next_rng(accuracy_seed)
+    hit_chance = calculate_hit_chance(brian_agi, GUILTY_AGILITY)
+    hit_roll = roll_rng(hit_seed, 100)
+
+    if hit_roll >= hit_chance:
+        return False, 0, advance_rng_30(hit_seed)
+
+    return True, 0, advance_rng_30(hit_seed)
+
+@njit()
+def simulate_brian_melee(seed, brian_agi: int, weakness_active=False):
     agility_seed = next_rng(seed)
-    agility_chance = calculate_hit_chance(BRIAN_AGILITY, GUILTY_AGILITY)
+    agility_chance = calculate_hit_chance(brian_agi, GUILTY_AGILITY)
     agility_roll = roll_rng(agility_seed, 100)
 
     if agility_roll >= agility_chance:
@@ -616,8 +666,10 @@ def simulate_brian_melee(seed, weakness_active=False):
     spirit_influence = power - penalty
     attack_power = (spirit_influence * BRIAN_STAFF_POWER) >> 4
     enemy_defense = GUILTY_DEFENSE
+    
     if weakness_active:
         enemy_defense = enemy_defense >> 1
+    
     defense_coefficient = attack_power / (attack_power + enemy_defense)
 
     damage_seed = next_rng(agility_seed)
@@ -628,28 +680,33 @@ def simulate_brian_melee(seed, weakness_active=False):
     return True, damage, damage_seed
 
 @njit()
-def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, guilty_x, guilty_z, guilty_stats, guilty_debuffs) -> Tuple[int, int]:
+def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, brian_position, guilty_x, guilty_z, guilty_stats, guilty_debuffs) -> Tuple[int, int]:
     cannot_attack = not can_attack
     
     can_afford_spells = brian_stats[1] >= 3
     can_afford_cheap_spells = brian_stats[1] >= 1
+    can_cast_evade_2 = BRIAN_WIND >= 24
     
     weakness_currently_active = guilty_debuffs[0] > 0
+    brian_agi = 4 * BRIAN_AGILITY if brian_buffs[2] > 0 else BRIAN_AGILITY
     
-    avalanche_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, guilty_x, guilty_z, weakness_currently_active)
-    melee_hit, melee_damage, melee_seed = simulate_brian_melee(seed, weakness_currently_active)
-    water_hit, water_damage, water_seed = simulate_water_1(seed, weakness_currently_active)
-    rock_hit, rock_damage, rock_seed = simulate_rock_1(seed, weakness_currently_active)
+    avalanche_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, BRIAN_X, BRIAN_Y, BRIAN_Z, brian_agi, guilty_x, guilty_z, weakness_currently_active)
+    avalanche_hits_alt, avalanche_damage_alt, avalanche_seed_alt = simulate_avalanche(seed, BRIAN_X_ALT, BRIAN_Y, BRIAN_Z_ALT, brian_agi, guilty_x, guilty_z, weakness_currently_active)
+    melee_hit, melee_damage, melee_seed = simulate_brian_melee(seed, brian_agi, weakness_currently_active)
+    water_hit, water_damage, water_seed = simulate_water_1(seed, brian_agi, weakness_currently_active)
+    rock_hit, rock_damage, rock_seed = simulate_rock_1(seed, brian_agi, weakness_currently_active)
+    drain_hit, _, drain_seed = simulate_drain_magic(seed, brian_agi)
 
     ## Can we kill Guilty right now
     ##
     ## Check the damaging spells + melee to see if any will
     ## end the fight right now.
     ##
-    if can_afford_spells and avalanche_damage >= guilty_stats[0]:
-        brian_stats[1] -= 3
-        guilty_stats[0] -= avalanche_damage
-        return DECISION_AVALANCHE, avalanche_seed
+
+    if melee_hit and melee_damage >= guilty_stats[0]:
+        brian_stats[1] += 1
+        guilty_stats[0] -= melee_damage
+        return DECISION_MELEE, melee_seed
     
     if can_afford_cheap_spells:
         if water_damage >= guilty_stats[0]:
@@ -662,10 +719,15 @@ def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, guilty_x, gu
             guilty_stats[0] -= rock_damage
             return DECISION_ROCK_1, rock_seed
         
-    if melee_damage >= guilty_stats[0]:
-        brian_stats[1] += 1
-        guilty_stats[0] -= melee_damage
-        return DECISION_MELEE, melee_seed
+    if can_afford_spells and avalanche_damage >= guilty_stats[0]:
+        brian_stats[1] -= 3
+        guilty_stats[0] -= avalanche_damage
+        return DECISION_AVALANCHE, avalanche_seed
+    
+    if can_afford_spells and avalanche_damage_alt >= guilty_stats[0]:
+        brian_stats[1] -= 3
+        guilty_stats[0] -= avalanche_damage_alt
+        return DECISION_AVALANCHE_ALT, avalanche_seed_alt
     
     ## Unlike Mammon, Guilty will be in 2-shot range for the entire fight,
     ## making it much more dangerous to play around without barrier.
@@ -683,6 +745,19 @@ def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, guilty_x, gu
 
         return DECISION_BARRIER, barrier_seed
     
+    ## Check for mana
+    ##
+    ## We could've rolled confusion earlier, but getting here and still needing mana
+    ## may pose a risk.
+    ##
+    if can_afford_spells and drain_hit and brian_stats[1] <= 20 and roll_for_variation(4) == 1:
+        brian_stats[1] = BRIAN_MP
+        return DECISION_DRAIN_MAGIC, drain_seed
+    
+    if can_afford_spells and drain_hit and brian_stats[1] <= 10 and roll_for_variation(2) == 1:
+        brian_stats[1] = BRIAN_MP
+        return DECISION_DRAIN_MAGIC, drain_seed
+    
     ## Our second most important spell is obviously avalanche.
     ##
     ## Check if we get a juict one before continuing.
@@ -692,15 +767,30 @@ def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, guilty_x, gu
         guilty_stats[0] -= avalanche_damage
         return DECISION_AVALANCHE, avalanche_seed
     
-    ## Check for Weakness and Barrier options
+    if can_attack and can_afford_spells and (avalanche_hits_alt >= 4 or avalanche_damage_alt >= 250):
+        brian_stats[1] -= 3
+        guilty_stats[0] -= avalanche_damage_alt
+        return DECISION_AVALANCHE_ALT, avalanche_seed_alt
+    
+    
+    
+    ## Check for Weakness and Evade options
     ##
     ## These are always wildcards, as we don't use Weakness in normal playthroughs
     ## but manips use it pretty heavily.  Barrier is also different here, as we
     ## will sometimes 
     ##
-    weakness_hit, weakness_roll, weakness_turns, weakness_seed = simulate_weakness(seed)
+    weakness_hit, weakness_roll, weakness_turns, weakness_seed = simulate_weakness(seed, brian_agi)
     weakness_not_strong = guilty_debuffs[0] <= 3
     weakness_bias = (cannot_attack or (roll_for_variation(3) == 1)) and (weakness_not_strong or weakness_turns >= 3)
+    
+
+    evade_hit, evade_roll, evade_turns, evade_seed = simulate_evade_2(seed)
+    
+    if can_afford_spells and can_cast_evade_2 and evade_hit and evade_turns >= 4 and roll_for_variation(2) == 1:
+        brian_stats[1] -= 3
+        brian_buffs[2] = evade_turns + 1
+        return DECISION_EVADE_2, evade_seed
     
     if can_afford_spells and weakness_bias and weakness_hit:
         brian_stats[1] -= 3
@@ -722,14 +812,18 @@ def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, guilty_x, gu
     
     if can_afford_spells and confusion_not_strong and confusion_bias and confusion_hit and confusion_turns >= 2:
         brian_stats[1] -= 3
-        brian_buffs[1] = confusion_turns
+        brian_buffs[1] = confusion_turns + 1
         return DECISION_CONFUSION, confusion_seed
-    
     
     if can_attack and can_afford_spells and avalanche_damage >= 140:
         brian_stats[1] -= 3
         guilty_stats[0] -= avalanche_damage
         return DECISION_AVALANCHE, avalanche_seed
+    
+    if can_attack and can_afford_spells and avalanche_damage_alt >= 140:
+        brian_stats[1] -= 3
+        guilty_stats[0] -= avalanche_damage_alt
+        return DECISION_AVALANCHE_ALT, avalanche_seed_alt
     
     melee_bias = ((not can_afford_spells) and coinflip()) or (roll_for_variation(4) == 1)
     if can_attack and melee_hit and melee_bias:
@@ -742,20 +836,20 @@ def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, guilty_x, gu
         guilty_stats[0] -= avalanche_damage
         return DECISION_AVALANCHE, avalanche_seed
     
-    ## Check for mana
-    ##
-    ## We could've rolled confusion earlier, but getting here and still needing mana
-    ## may pose a risk.
-    ##
-    if brian_stats[1] <= 20 and roll_for_variation(2) <= 2:
-        brian_stats[1] = BRIAN_MP
-        return DECISION_MANA_ITEM, seed
+    if can_attack and can_afford_spells and avalanche_hits_alt >= 1:
+        brian_stats[1] -= 3
+        guilty_stats[0] -= avalanche_damage
+        return DECISION_AVALANCHE_ALT, avalanche_seed_alt
+    
+    # if brian_stats[1] <= 20 and roll_for_variation(2) <= 2:
+    #     brian_stats[1] = BRIAN_MP
+    #     return DECISION_MANA_ITEM, seed
 
-    ## Prefer to heal here, but allow for variance
-    ##
-    elif brian_stats[1] < 3 and roll_for_variation(10) >= 2:
-        brian_stats[1] = BRIAN_MP
-        return DECISION_MANA_ITEM, seed
+    # ## Prefer to heal here, but allow for variance
+    # ##
+    # elif brian_stats[1] < 3 and roll_for_variation(10) >= 2:
+    #     brian_stats[1] = BRIAN_MP
+    #     return DECISION_MANA_ITEM, seed
     
     
     ## Last Options for randomness 
@@ -784,10 +878,15 @@ def simulate_brian_turn(seed, can_attack, brian_stats, brian_buffs, guilty_x, gu
         guilty_stats[0] -= avalanche_damage
         return DECISION_AVALANCHE, avalanche_seed
     
+    elif can_attack and can_afford_spells and coinflip():
+        brian_stats[1] -= 3
+        guilty_stats[0] -= avalanche_damage_alt
+        return DECISION_AVALANCHE_ALT, avalanche_seed_alt
+    
     return DECISION_PASS, seed
 
 attack_decisions = np.array([DECISION_AVALANCHE, DECISION_MELEE, DECISION_ROCK_1, DECISION_WATER_1], dtype=int)
-expensive_decisions = np.array([DECISION_AVALANCHE, DECISION_BARRIER, DECISION_CONFUSION], dtype=int)
+expensive_decisions = np.array([DECISION_AVALANCHE, DECISION_BARRIER, DECISION_CONFUSION, DECISION_AVALANCHE_ALT, DECISION_DRAIN_MAGIC, DECISION_EVADE_2], dtype=int)
 
 @njit()
 def simulate_brian_turn_explicit(seed, decision_code, can_attack, brian_stats, brian_buffs, GUILTY_stats, GUILTY_debuffs, guilty_position) -> int:
@@ -801,12 +900,19 @@ def simulate_brian_turn_explicit(seed, decision_code, can_attack, brian_stats, b
         return seed
 
     weakness_currently_active = GUILTY_debuffs[0] > 0
+    brian_agi = 4 * BRIAN_AGILITY if brian_buffs[2] > 0 else BRIAN_AGILITY
 
     if decision_code == DECISION_AVALANCHE:
-        rock_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, guilty_position[0], guilty_position[1], weakness_currently_active)
+        rock_hits, avalanche_damage, avalanche_seed = simulate_avalanche(seed, BRIAN_X, BRIAN_Y, BRIAN_Z, brian_agi, guilty_position[0], guilty_position[1], weakness_currently_active)
         brian_stats[1] -= 3
         GUILTY_stats[0] -= avalanche_damage
         return avalanche_seed
+    
+    if decision_code == DECISION_AVALANCHE_ALT:
+        rock_hits_alt, avalanche_damage_alt, avalanche_seed_alt = simulate_avalanche(seed, BRIAN_X_ALT, BRIAN_Y, BRIAN_Z_ALT, brian_agi, guilty_position[0], guilty_position[1], weakness_currently_active)
+        brian_stats[1] -= 3
+        GUILTY_stats[0] -= avalanche_damage_alt
+        return avalanche_seed_alt
     
     if decision_code == DECISION_BARRIER:
         barrier_hit, barrier_roll, barrier_turns, barrier_seed = simulate_barrier(seed)
@@ -816,7 +922,7 @@ def simulate_brian_turn_explicit(seed, decision_code, can_attack, brian_stats, b
         return barrier_seed
     
     if decision_code == DECISION_WEAKNESS:
-        weakness_hit, weakness_roll, weakness_turns, weakness_seed = simulate_weakness(seed)
+        weakness_hit, weakness_roll, weakness_turns, weakness_seed = simulate_weakness(seed, brian_agi)
         brian_stats[1] -= 3
         if weakness_hit:
             GUILTY_debuffs[0] = weakness_turns
@@ -830,7 +936,7 @@ def simulate_brian_turn_explicit(seed, decision_code, can_attack, brian_stats, b
         return confusion_seed
     
     elif decision_code == DECISION_MELEE:
-        melee_hit, melee_damage, melee_seed = simulate_brian_melee(seed, weakness_currently_active)
+        melee_hit, melee_damage, melee_seed = simulate_brian_melee(seed, brian_agi, weakness_currently_active)
         brian_stats[1] += 1
         GUILTY_stats[0] -= melee_damage
         return melee_seed
@@ -843,26 +949,37 @@ def simulate_brian_turn_explicit(seed, decision_code, can_attack, brian_stats, b
         brian_stats[0] = BRIAN_HP
         return seed
 
-    can_afford_cheap_spells = brian_stats[1] >= 1
-    
     if decision_code == DECISION_ROCK_1:
-        rock_hit, rock_damage, rock_seed = simulate_rock_1(seed, weakness_currently_active)
+        rock_hit, rock_damage, rock_seed = simulate_rock_1(seed, brian_agi, weakness_currently_active)
         brian_stats[1] -= 1
         if rock_hit:
             GUILTY_stats[0] -= rock_damage
         return rock_seed
     
     elif decision_code == DECISION_WATER_1:
-        water_hit, water_damage, water_seed = simulate_water_1(seed, weakness_currently_active)
+        water_hit, water_damage, water_seed = simulate_water_1(seed, brian_agi, weakness_currently_active)
         brian_stats[1] -= 1
         if water_hit:
             GUILTY_stats[0] -= water_damage
         return water_seed
 
+    elif decision_code == DECISION_DRAIN_MAGIC:
+        drain_hit, _, drain_seed = simulate_drain_magic(seed, brian_agi)
+        if drain_hit:
+            brian_stats[1] = BRIAN_MP
+        return drain_seed
+    
+    elif decision_code == DECISION_EVADE_2:
+        evade_hit, evade_roll, evade_turns, evade_seed = simulate_evade_2(seed)
+        brian_stats[1] -= 3
+        if evade_hit:
+            brian_buffs[2] = evade_turns + 1
+        return evade_seed
+
     return seed
 
 @njit()
-def simulate_guilty_damage(seed, spell_accuracy, spell_power):
+def simulate_guilty_damage(seed: int, spell_accuracy: int, spell_power: int, brian_combat_agi: int):
     hit_seed = next_rng(seed)
     hit_roll = roll_rng(hit_seed, 100)
     if hit_roll >= spell_accuracy:
@@ -870,7 +987,7 @@ def simulate_guilty_damage(seed, spell_accuracy, spell_power):
     
     agi_seed = next_rng(hit_seed)
     agi_roll = roll_rng(agi_seed, 100)
-    agi_chance = calculate_hit_chance(GUILTY_AGILITY, BRIAN_AGILITY)
+    agi_chance = calculate_hit_chance(GUILTY_AGILITY, brian_combat_agi)
     if agi_roll >= agi_chance:
         return False, 0, agi_seed
     
@@ -884,16 +1001,16 @@ def simulate_guilty_damage(seed, spell_accuracy, spell_power):
     return True, damage, damage_seed
 
 @njit()
-def simulate_guilty_pound(seed: int):
-    hit, damage, attack_seed = simulate_guilty_damage(seed, GUILTY_POUND_ACCURACY, GUILTY_POUND_POWER)
+def simulate_guilty_pound(seed: int, brian_combat_agi: int):
+    hit, damage, attack_seed = simulate_guilty_damage(seed, GUILTY_POUND_ACCURACY, GUILTY_POUND_POWER, brian_combat_agi)
     particle_seed = advance_rng_30(attack_seed)
     
     return hit, damage, particle_seed
 
 @njit()
-def simulate_guilty_slash(seed):
+def simulate_guilty_slash(seed, brian_combat_agi: int):
     
-    hit, damage, attack_seed = simulate_guilty_damage(seed, GUILTY_SLASH_ACCURACY, GUILTY_SLASH_POWER)
+    hit, damage, attack_seed = simulate_guilty_damage(seed, GUILTY_SLASH_ACCURACY, GUILTY_SLASH_POWER, brian_combat_agi)
     if hit:
         attack_seed = next_rng(attack_seed) # Restriction roll
         
@@ -936,10 +1053,12 @@ def move_guilty_towards_brian(guilty_position, brian_position):
         return
 
 @njit()
-def simulate_guilty_turn(seed: int, guilty_position, brian_position, brian_stats, brian_buffs, barrier_turns) -> Tuple[int, int]:
+def simulate_guilty_turn(seed: int, guilty_position, brian_position, brian_stats, brian_buffs, brian_base_agi:int, barrier_turns) -> Tuple[int, int]:
     
     [brian_x, brian_z] = brian_position
     [guilty_x, guilty_z] = guilty_position
+    
+    brian_agi = 4 * brian_base_agi if brian_buffs[2] > 0 else brian_base_agi
         
     distance_to_brian = get_collision_distance_to_brian(brian_x, brian_z, guilty_x, guilty_z)
     
@@ -950,7 +1069,7 @@ def simulate_guilty_turn(seed: int, guilty_position, brian_position, brian_stats
     if distance_to_brian < GUILTY_POUND_RANGE:
         if barrier_turns > 0:
             return advance_rng_30(seed), 0
-        hit, damage, resulting_seed = simulate_guilty_pound(seed)
+        hit, damage, resulting_seed = simulate_guilty_pound(seed, brian_agi)
         if hit:
             apply_damage_to_brian(damage, brian_stats, brian_buffs, True)
         
@@ -964,7 +1083,7 @@ def simulate_guilty_turn(seed: int, guilty_position, brian_position, brian_stats
         move_guilty_towards_brian(guilty_position, brian_position)
         if barrier_turns > 0:
             return advance_rng_30(seed), 0
-        hit, damage, resulting_seed = simulate_guilty_slash(seed)
+        hit, damage, resulting_seed = simulate_guilty_slash(seed, brian_agi)
         if hit:
             apply_damage_to_brian(damage, brian_stats, brian_buffs, True)
         
@@ -987,7 +1106,7 @@ def simulate_guilty_turn(seed: int, guilty_position, brian_position, brian_stats
         move_guilty_towards_brian(guilty_position, brian_position)
         if barrier_turns > 0:
             return advance_rng_30(decision_seed), 0
-        hit, damage, resulting_seed = simulate_guilty_pound(decision_seed)
+        hit, damage, resulting_seed = simulate_guilty_pound(decision_seed, brian_agi)
         if hit:
             apply_damage_to_brian(damage, brian_stats, brian_buffs, True)
         
@@ -1000,7 +1119,7 @@ def simulate_guilty_turn(seed: int, guilty_position, brian_position, brian_stats
     else:
         if barrier_turns > 0:
             return advance_rng_30(decision_seed), 0
-        hit, damage, resulting_seed = simulate_guilty_slash(decision_seed)
+        hit, damage, resulting_seed = simulate_guilty_slash(decision_seed, brian_agi)
         if hit:
             apply_damage_to_brian(damage, brian_stats, brian_buffs, True)
     
@@ -1020,7 +1139,8 @@ def sim_guilty_randomly(seed: int, max_turns: int) -> Tuple[bool, int, Tuple[np.
     brian_stats = [BRIAN_HP, BRIAN_MP]
     brian_buffs = [
         0, # Barrier
-        0  # Confusion
+        0, # Confusion
+        0, # Evade Level 2
     ]
     guilty_stats = [GUILTY_HP]
     guilty_debuffs = [0]
@@ -1045,6 +1165,7 @@ def sim_guilty_randomly(seed: int, max_turns: int) -> Tuple[bool, int, Tuple[np.
             can_attack=can_attack, 
             brian_stats=brian_stats, 
             brian_buffs=brian_buffs, 
+            brian_position=brian_position,
             guilty_x=guilty_position[0],
             guilty_z=guilty_position[1],
             guilty_stats=guilty_stats, 
@@ -1072,6 +1193,7 @@ def sim_guilty_randomly(seed: int, max_turns: int) -> Tuple[bool, int, Tuple[np.
                 brian_position=brian_position,
                 brian_stats=brian_stats, 
                 brian_buffs=brian_buffs, 
+                brian_base_agi=BRIAN_AGILITY,
                 barrier_turns=brian_buffs[0]
             )
             
@@ -1141,7 +1263,7 @@ def increment_against_hex_cap(current: np.longlong, hex_cap: np.longlong) -> np.
 def sim_GUILTY_brute_force(seed: int, decision_codes_hi: np.longlong, decision_codes_lo: np.longlong, max_turns=16):
     
     brian_stats = [BRIAN_HP, BRIAN_MP]
-    brian_buffs = [0, 0]
+    brian_buffs = [0, 0, 0]
     guilty_stats = [GUILTY_HP]
     guilty_debuffs = [0]
     
@@ -1177,6 +1299,8 @@ def sim_GUILTY_brute_force(seed: int, decision_codes_hi: np.longlong, decision_c
             brian_buffs[0] -= 1
         if brian_buffs[1] > 0:
             brian_buffs[1] -= 1
+        if brian_buffs[2] > 0:
+            brian_buffs[2] -= 1
             
         if guilty_stats[0] > 0:
             iter_seed, damage = simulate_guilty_turn(
@@ -1185,6 +1309,7 @@ def sim_GUILTY_brute_force(seed: int, decision_codes_hi: np.longlong, decision_c
                 brian_position=brian_position, 
                 brian_stats=brian_stats, 
                 brian_buffs=brian_buffs, 
+                brian_base_agi=BRIAN_AGILITY,
                 barrier_turns=brian_buffs[0]
             )
             
@@ -1214,7 +1339,11 @@ def run_sim(starting_seed, sim_count, heal_variance, exit_variance, max_turns=16
     for heals in range(heal_variance+1):
         for exits in range(exit_variance+1):
             turns, (decisions_hi, decisions_lo) = sim_bulk(starting_seed, exits, heals, sim_count, max_turns)
-            if turns < best_turns:
+            if (turns < best_turns) or (
+                (turns == best_turns) and (
+                    (heals + exits) < (heal_count + exit_count)
+                )
+            ):
                 best_turns = turns
                 decision_result_hi = decisions_hi
                 decision_result_lo = decisions_lo
@@ -1230,6 +1359,7 @@ class DamageExpectation:
     final_seed: int
     hits: int
     damage: int
+    brian_agi: int 
     position: List[float] = None
     brian_position: List[float] = None
     weakness_active: bool = False
@@ -1239,23 +1369,24 @@ class GuiltyExpectation:
     start_seed: int
     final_seed: int
     damage: int
+    brian_agi: int 
     position: List[float]
     brian_position: List[float]
 
 AVALANCHE_EXPECTATIONS = [
-    DamageExpectation(start_seed=0x69905392, final_seed=0x4DC05C3E, hits=4, damage=256, position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=False),
-    DamageExpectation(start_seed=0x88F5947F, final_seed=0x00134c80, hits=3, damage=199, position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=False),
-    DamageExpectation(start_seed=0x4FB42983, final_seed=0xFE269548, hits=1, damage=92,  position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=True),
-    DamageExpectation(start_seed=0xD8884354, final_seed=0xA7D54EA1, hits=3, damage=198,  position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=False),
+    DamageExpectation(start_seed=0x69905392, final_seed=0x4DC05C3E, brian_agi=24, hits=4, damage=256, position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=False),
+    DamageExpectation(start_seed=0x88F5947F, final_seed=0x00134c80, brian_agi=24, hits=3, damage=199, position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=False),
+    DamageExpectation(start_seed=0x4FB42983, final_seed=0xFE269548, brian_agi=24, hits=1, damage=92,  position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=True),
+    DamageExpectation(start_seed=0xD8884354, final_seed=0xA7D54EA1, brian_agi=24, hits=3, damage=198,  position=[GUILTY_SPOT_CLOSE_X, GUILTY_SPOT_CLOSE_Z], brian_position=[BRIAN_X, BRIAN_Z], weakness_active=False),
 ]
 GUILTY_TURN_EXPECTATIONS = [
-    GuiltyExpectation(start_seed=0xCB72A799, final_seed=0x14D0681F, damage=48, position=[0, 0], brian_position=[BRIAN_X, BRIAN_Z]),
-    GuiltyExpectation(start_seed=0x14D0681F, final_seed=0x40D9AE15, damage=96, position=[GUILTY_SPOT_MID_X, GUILTY_SPOT_MID_Z], brian_position=[BRIAN_X, BRIAN_Z]),
-    GuiltyExpectation(start_seed=0x00000000, final_seed=0x1F7301BF, damage=48, position=[GUILTY_SPOT_MID_X, GUILTY_SPOT_MID_Z], brian_position=[BRIAN_X, BRIAN_Z]),
-    GuiltyExpectation(start_seed=0x7ECE651E, final_seed=0x9120F02C, damage=47, position=[0,0], brian_position=[BRIAN_X, BRIAN_Z]),
+    GuiltyExpectation(start_seed=0xCB72A799, final_seed=0x14D0681F, brian_agi=24, damage=48, position=[0, 0], brian_position=[BRIAN_X, BRIAN_Z]),
+    GuiltyExpectation(start_seed=0x14D0681F, final_seed=0x40D9AE15, brian_agi=24, damage=96, position=[GUILTY_SPOT_MID_X, GUILTY_SPOT_MID_Z], brian_position=[BRIAN_X, BRIAN_Z]),
+    GuiltyExpectation(start_seed=0x00000000, final_seed=0x1F7301BF, brian_agi=24, damage=48, position=[GUILTY_SPOT_MID_X, GUILTY_SPOT_MID_Z], brian_position=[BRIAN_X, BRIAN_Z]),
+    GuiltyExpectation(start_seed=0x7ECE651E, final_seed=0x9120F02C, brian_agi=24, damage=47, position=[0,0], brian_position=[BRIAN_X, BRIAN_Z]),
 ]
 MELEE_EXPECTATIONS = [
-    DamageExpectation(start_seed=0xB060F4B8, final_seed=0xCB4725F6, hits=1, damage=47)
+    DamageExpectation(start_seed=0xB060F4B8, brian_agi=24, final_seed=0xCB4725F6, hits=1, damage=47)
 ]
 
 def test_guilty_turn():
@@ -1267,6 +1398,7 @@ def test_guilty_turn():
             guilty_position=expectation.position, 
             brian_position=expectation.brian_position, 
             brian_stats=[BRIAN_HP, BRIAN_MP], 
+            brian_base_agi= expectation.brian_agi,
             brian_buffs=[0, 0], 
             barrier_turns=0
         )
@@ -1284,6 +1416,10 @@ def test_avalanche():
         print(f"  -- Case {k}:")
         sim_hits, sim_damage, sim_seed = simulate_avalanche(
             seed=expectation.start_seed, 
+            brian_x=BRIAN_X,
+            brian_y=BRIAN_Y,
+            brian_z=BRIAN_Z,
+            brian_agi=expectation.brian_agi,
             guilty_x=expectation.position[0],
             guilty_z=expectation.position[1],
             weakness_active=expectation.weakness_active
@@ -1323,15 +1459,16 @@ def test():
     # test_guilty_turn()
     
 def main():
-    test()
-    return
+    # test()
+    # return
     
     from multiprocessing import Pool
     
     # # test()
     start = time.time()
     
-    seed = 0xCB72A799
+    # seed = 0xCB72A799
+    seed = 0x681518FC
     
     # success, turns, (decisions_hi, decisions_lo) = sim_guilty_randomly(seed, 32)
     # print(f"{seed:8X}--------") 
@@ -1354,9 +1491,9 @@ def main():
     
     
     
-    heal_range = 12
-    exit_range = 12
-    sim_count = 100
+    heal_range = 4
+    exit_range = 4
+    sim_count = 1000
     max_turns = 28
     
     print(f"Starting Guilty Sim, {sim_count} runs with {heal_range}x{exit_range} ...")
@@ -1384,7 +1521,11 @@ def main():
     heals = 0
     
     for [iter_heals, iter_exits, iter_turns, (iter_decisions_hi, iter_decisions_lo)] in results:
-        if iter_turns < turns:
+        if (iter_turns < turns) or (
+            (iter_turns == turns) and (
+                (iter_heals + iter_exits) < (heals + exits)
+            )
+        ):
             decisions_hi = iter_decisions_hi
             decisions_lo = iter_decisions_lo
             heals = iter_heals

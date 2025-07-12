@@ -1,4 +1,4 @@
--- Quest 64 Encounter Map Tool
+-- Quest 64 Area Map Tool
 --
 -- This is a Lua script for the Bizhawk emulator
 -- to display the encounter areas in-game.  It does this
@@ -11,25 +11,24 @@
 -- appear on the right of your screen.
 --
 --
---
+-- 
 -- Encounter Map Config Values
 --
 -- These values will adjust how the map appears 
 -- and can be edited without issue, although some
 -- values will require a specific type etc.
 --
-local MAP_GRID_WIDTH = 18
+local MAP_GRID_WIDTH = 14
 local MAP_GRID_HEIGHT = 11
 local MAP_GRID_UNIT_SPACING = 5
-local MAP_ANCHOR_X = 40
-local MAP_ANCHOR_Y = 30
+local MAP_ANCHOR_X = 2
+local MAP_ANCHOR_Y = 20
 
 -- Color Config
 --
 -- Colors can be provided with either the english name
 -- or a corresponding hex code, accepting both 6 and 8 digits.
 --
-local MAP_LOW_CPU_COLORS = false
 local MAP_COLOR_PLAYER = "cyan"
 local MAP_COLOR_3_TURNS = "red"
 local MAP_COLOR_2_TURNS = "orange"
@@ -65,16 +64,13 @@ local CACHED_BLOCK_WIDTH = 200
 --                                                             --
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
 -- Memory Values
-local MEM_ENCOUNTER_STEP_DISTANCE = 0x8BFAC
-local MEM_ENCOUNTER_ACCUMULATION = 0x8BFB0
-local MEM_CAMERA_ROTATION_Y = 0x085E70
-local MEM_GAME_STATE = 0x4DCA0
-local MEM_ALLOW_BATTLES = 0x0842E8
-local MEM_BRIAN_POSITION_X = 0x7AA20
-local MEM_BRIAN_POSITION_Y = 0x7AA24
-local MEM_BRIAN_POSITION_Z = 0x7AA28
-local MEM_CURRENT_MAP_ID = 0x0842BF
-local MEM_CURRENT_SUBMAP_ID = 0x0842C3
+local MEM_ENCOUNTER_STEP_DISTANCE = 0x8C574
+local MEM_ENCOUNTER_ACCUMULATION = 0x8C578
+local MEM_CAMERA_ROTATION_Y = 0x86DE8
+local MEM_GAME_STATE = 0x7B2E4
+local MEM_ALLOW_BATTLES = 0x084F10
+local MEM_BRIAN_POSITION_X = 0x7BACC
+local MEM_BRIAN_POSITION_Z = 0x7BAD4
 
 -- GUI Constants
 local GUI_CHAR_WIDTH = 10
@@ -89,6 +85,86 @@ local cached_regional_blocks = {}
 local encounter_checked_at = 0
 local last_step_distance = 0
 local last_encounter_check_result = nil
+
+local MEM_PTR_MAP_DATA_MAIN = 0x084F18
+local MEM_PTR_MAP_DATA_VEGETATION = 0x084F24
+local MEM_PTR_MAP_DATA_NAVIGATION = 0x084F2C
+
+local function TrimPointer(address)
+    return bit.band(address, 0x00FFFFFF)
+end
+
+local function GetPointerFromAddress(address)
+    local ptr = memory.read_u32_be(address, "RDRAM")
+    return TrimPointer(ptr)
+end
+
+local function GetMapIDs()
+    local mapID = memory.readbyte(0x8536B, "RDRAM")
+    local subMapID = memory.readbyte(0x8536F, "RDRAM")
+
+    return mapID, subMapID
+end
+
+local function ReadNavMesh()
+
+    local map, submap = GetMapIDs()
+    local ptr_nav_data = GetPointerFromAddress(MEM_PTR_MAP_DATA_NAVIGATION)
+
+    -- Need the submap index to read everything
+    local ptr_submap_nav_data = ptr_nav_data + 0x10 * submap
+
+    local ptr_verts = GetPointerFromAddress(ptr_submap_nav_data)
+    local ptr_vert_indices = GetPointerFromAddress(ptr_submap_nav_data + 0x4)
+    local ptr_vert_groups = GetPointerFromAddress(ptr_submap_nav_data + 0x8)
+    local total_groups = memory.read_u32_be(ptr_submap_nav_data + 0xC, "RDRAM")
+
+    local groups = {}
+
+    -- console.clear()
+
+    for k=0,total_groups-1 do
+        local index = ptr_vert_groups + k * 0x8
+        local a = memory.read_u32_be(index + 0x0, "RDRAM")
+        local b = memory.read_u32_be(index + 0x4, "RDRAM")
+
+        -- console.log(string.format("Index: %s, Length %s", a, b))
+
+        groups[#groups+1] = {a=a, b=b}
+    end
+
+    local chains = {}
+
+    for k=1, #groups do
+        local pair = groups[k]
+
+        local ptr_index_start = ptr_vert_indices + 0x4 * pair.a
+        local ptr_index_end = ptr_vert_indices + 0x4 * (pair.a + pair.b)
+
+        local chain = {}
+
+        for ptr_index = ptr_index_start, ptr_index_end, 0x4 do
+            local index = memory.read_u32_be(ptr_index, "RDRAM")
+
+            -- console.log(string.format("%08X", index))
+
+            local ptr_vert = ptr_verts + index * 0x8
+            local coord = {
+                x = memory.readfloat(ptr_vert + 0x0, true, "RDRAM"),
+                z = memory.readfloat(ptr_vert + 0x4, true, "RDRAM")
+            }
+
+            chain[#chain+1] = coord
+        end
+
+        chains[#chains+1] = chain
+    end
+
+    -- console.log(string.format("NavMesh for %s-%s: Found %s shapes!", map, submap, #chains))
+
+    return chains
+end
+
 
 
 local cached_regions = {}
@@ -174,18 +250,8 @@ end
 
 local function GetEncounterPointers()
 
-    local ptr_region_data = GetPointerFromAddress(0x08BF98)
-    local ptr_circle_data = GetPointerFromAddress(0x08BF9C)
-
-    -- 145EB4	w	s	1	RDRAM	
-    -- 145EB6	w	s	1	RDRAM
-    -- 146138	d	h	1	RDRAM	
-    -- 80146130
-    -- 80145DD4
-    -- 80145D80
-    -- 80145DBC
-
-    -- 08BF98	d	h	1	RDRAM	
+    local ptr_region_data = GetPointerFromAddress(0x08C560)
+    local ptr_circle_data = GetPointerFromAddress(0x08C564)
 
     return {
         ptr_region_start = GetPointerFromAddress(ptr_region_data),
@@ -287,17 +353,6 @@ local function GetRegionOverlapIndex(sample_x, sample_z)
     return -1
 end
 
-local function GetStepInfo()
-
-    local encounterCount = memory.read_u16_be(MEM_ENCOUNTER_ACCUMULATION, "RDRAM");
-    local stepDistance = Round(memory.readfloat(MEM_ENCOUNTER_STEP_DISTANCE, true, "RDRAM"), 1)
-
-    return {
-        counter = encounterCount,
-        distance = stepDistance
-    }
-end
-
 local function GetBrianLocation()
     local brianX = memory.readfloat(MEM_BRIAN_POSITION_X, true, "RDRAM")
     local brianZ = memory.readfloat(MEM_BRIAN_POSITION_Z, true, "RDRAM")
@@ -337,14 +392,8 @@ end
 local function GuiRowRightWithColorExplicit(row_index, char_index, text, color, border_width, screen_width)
     
     local resolvedOffset = screen_width - border_width - GUI_PADDING_RIGHT
+
     gui.text(resolvedOffset + char_index * GUI_CHAR_WIDTH, 20 + row_index * 15, text, color)
-end
-
-local function GetMapIDs()
-    local mapID = memory.readbyte(MEM_CURRENT_MAP_ID, "RDRAM")
-    local subMapID = memory.readbyte(MEM_CURRENT_SUBMAP_ID, "RDRAM")
-
-    return mapID, subMapID
 end
 
 local function GetMovementRadius()
@@ -601,21 +650,6 @@ end
 
 local function PrintEncounterGrid(centers, grid_width, grid_height, unit_spacing, starting_row, column_offset)
 
-    local safe_zone = centers == nil or #centers == 0
-    if safe_zone then
-        local STR_LINE_1 = "Safe Zone"
-        local STR_LINE_2 = ""
-
-        local print_row_1 = starting_row + grid_height + 1
-        local print_row_2 = starting_row + grid_height + 2
-        local print_col_1 = column_offset - string.len(STR_LINE_1) / 2
-        local print_col_2 = column_offset - string.len(STR_LINE_2) / 2
-
-        GuiCharRightWithColor(print_row_1, print_col_1, STR_LINE_1, 0xFFAAAAAA)
-        GuiCharRightWithColor(print_row_2, print_col_2, STR_LINE_2, 0xFFAAAAAA)
-        return
-    end
-
     local brian = GetBrianLocation()
     local output = {}
 
@@ -627,150 +661,57 @@ local function PrintEncounterGrid(centers, grid_width, grid_height, unit_spacing
 
     local movement_radius = GetMovementRadius()
 
-    for z = 0, 2 * grid_height do
-        local row = {}
-        output[#output+1] = row
+    local brian_x = brian.x
+    local brian_z = brian.z
 
-        for x = 0, 2 * grid_width do
-            
-            local grid_x = unit_spacing * (x - grid_width)
-            local grid_z = unit_spacing * (z - grid_height)
-
-            local offset_x = camera_right.x * grid_x + camera_forward.x * grid_z
-            local offset_z = camera_right.z * grid_x + camera_forward.z * grid_z
-
-            local sample_x = brian.x + offset_x
-            local sample_z = brian.z + offset_z
-
-            local result = GetCollidingEncounters(trimmed_centers, sample_x, sample_z, movement_radius)
-
-            row[#row+1] = result
-        end
-    end
-
-    local checked_encounter_now = false
-    local step_info = GetStepInfo()
-
-    if step_info.distance < last_step_distance then
-        checked_encounter_now = true
-        encounter_checked_at = os.time()
-    end
-
-    last_step_distance = step_info.distance
-    
+    -- local camera_right_x = camera_right.x
+    -- local camera_right_z = camera_right.z
+    -- local camera_forward_x = camera_forward.x
+    -- local camera_forward_z = camera_forward.z
+        
     local border_width = client.borderwidth();
+    local border_height = client.borderheight();
     local screen_width = client.screenwidth();
+    local screen_height = client.screenheight();
 
-    -- GuiTextCenterWithColor(20, "Sampling " .. #current_encounter_centers .. ", reduced to " .. #cached_neighbor_return, "Yellow")
+    -- local center_x = screen_width / 2
+    -- local center_z = screen_height / 2
 
-    starting_row = starting_row + 2
+    local center_x = 240
+    local center_z = 140
 
-    -- local blank_row = {}
-    -- for k=1, 2 * grid_width + 1 do
-    --     blank_row[#blank_row+1] = " "
-    -- end
+    -- console.log(screen_width)
 
-    -- local text_for_overlaps = ""
-    -- local text_for_no_regions = ""
-    -- local text_for_no_encounters = ""
+    local UNITS_TO_PIXELS = 0.2
+    local BRIAN_MAP_SIZE = 10
 
-    local color_player = MAP_COLOR_PLAYER
-    local color_no_region = MAP_COLOR_NO_REGION
-    local color_no_encounters = MAP_COLOR_NO_ENCOUNTERS
+    local navmesh = ReadNavMesh()
 
-    if MAP_LOW_CPU_COLORS then
-        color_no_region = 0xFFFFFFFF
-        color_no_encounters = 0xFFFFFFFF
+    gui.drawEllipse(center_x - BRIAN_MAP_SIZE * UNITS_TO_PIXELS, center_z - BRIAN_MAP_SIZE * UNITS_TO_PIXELS, 10, 10, 0xFF00FFFF)
+
+    for c, circle in pairs(trimmed_centers) do
+
+        local cx = (circle.x - brian_x - 50) * UNITS_TO_PIXELS + center_x
+        local cz = (circle.z - brian_z - 50) * UNITS_TO_PIXELS + center_z
+
+        gui.drawEllipse(cx, cz, 100 * UNITS_TO_PIXELS, 100 * UNITS_TO_PIXELS, 0xFFFF0000)
     end
 
-    for x = 1, #output do
+    for k, wall_chain in pairs(navmesh) do
 
-        local row = output[x]
-
-        -- local row_for_overlaps = MergeTables({}, blank_row)
-        -- local row_for_no_region = MergeTables({}, blank_row)
-        -- local row_for_no_encounters = MergeTables({}, blank_row)
-
-        local gx = x + starting_row
-
-        for z = 1, #row do
-
-            local result = row[z]
-            local color = GetOverlapColor(result.one_turns, result.two_turns, result.three_turns)
-            local color = result.color
-
-            if MAP_LOW_CPU_COLORS then
-                color = "white"
-            end
-            -- local color = "white"
-
-            local gy = z - column_offset
-
-            -- if x == (#output / 2 + 0.5) and z == (#row / 2 + 0.5) then
-
-            --     if checked_encounter_now then
-            --         last_encounter_check_result = result
-            --     end
-
-            --     GuiCharRightWithColorExplicit(gx, gy, result.overlaps, MAP_COLOR_PLAYER, border_width, screen_width)
-            -- elseif result.overlaps > 0 then
-            --     GuiCharRightWithColorExplicit(gx, gy, result.overlaps, color, border_width, screen_width)
-            -- elseif result.region_index < 0 then
-            --     GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_REGION, MAP_COLOR_NO_REGION, border_width, screen_width)
-            -- else
-            --     GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_ENCOUNTERS, color, border_width, screen_width)
-            -- end
-
-            if x == (#output / 2 + 0.5) and z == (#row / 2 + 0.5) then
-
-                if checked_encounter_now then
-                    last_encounter_check_result = result
-                end
-
-                GuiCharRightWithColorExplicit(gx, gy, result.overlaps, color_player, border_width, screen_width)
-            elseif result.overlaps > 0 then
-                GuiCharRightWithColorExplicit(gx, gy, result.overlaps, color, border_width, screen_width)
-            elseif result.region_index < 0 then
-                GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_REGION, color_no_region, border_width, screen_width)
-            else
-                GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_ENCOUNTERS, color_no_encounters, border_width, screen_width)
-            end
+        for vertex = 2, #wall_chain do
+            local a_world = wall_chain[vertex - 1]
+            local b_world = wall_chain[vertex - 0]
             
-            -- if result.center then
+            local ax = ((a_world.x - brian_x)) * UNITS_TO_PIXELS + center_x
+            local az = ((a_world.z - brian_z)) * UNITS_TO_PIXELS + center_z
+            local bx = ((b_world.x - brian_x)) * UNITS_TO_PIXELS + center_x
+            local bz = ((b_world.z - brian_z)) * UNITS_TO_PIXELS + center_z
 
-            --     if checked_encounter_now then
-            --         last_encounter_check_result = result
-            --     end
-
-            --     GuiCharRightWithColorExplicit(gx, gy, result.overlaps, MAP_COLOR_PLAYER, border_width, screen_width)
-            -- elseif result.overlaps > 0 then
-            --     -- GuiCharRightWithColorExplicit(gx, gy, result.overlaps, color, border_width, screen_width)
-            --     row_for_overlaps[z] = result.overlaps
-
-            -- elseif result.region_index < 0 then
-            --     -- GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_REGION, MAP_COLOR_NO_REGION, border_width, screen_width)
-            --     row_for_no_region[z] = MAP_CHARACTER_NO_REGION
-
-            -- else
-            --     -- GuiCharRightWithColorExplicit(gx, gy, MAP_CHARACTER_NO_ENCOUNTERS, MAP_COLOR_NO_ENCOUNTERS, border_width, screen_width)
-            --     row_for_no_encounters[z] = MAP_CHARACTER_NO_ENCOUNTERS
-            -- end
+            gui.drawLine(ax, az, bx, bz, 0xFFFFFFFF)
         end
-
-        -- console.log(grid_width .. ", " .. grid_height)
-        -- console.log(row_for_no_encounters)
-
-        -- text_for_overlaps = text_for_overlaps .. "\n" .. table.concat(row_for_overlaps, "")
-        -- text_for_no_encounters = text_for_no_encounters .. "\n" .. table.concat(row_for_no_encounters, "")
-        -- text_for_no_regions = text_for_no_regions .. "\n" .. table.concat(row_for_no_region, "")
-
     end
-    
-    -- GuiRowRightWithColorExplicit(1 + starting_row, 1 - column_offset, text_for_overlaps, "yellow", border_width, screen_width)
-    -- GuiRowRightWithColorExplicit(1 + starting_row, 1 - column_offset, text_for_no_encounters, MAP_COLOR_NO_ENCOUNTERS, border_width, screen_width)
-    -- GuiRowRightWithColorExplicit(1 + starting_row, 1 - column_offset, text_for_no_regions, MAP_COLOR_NO_REGION, border_width, screen_width)
 
-    -- console.log(#output .. ", " .. #output[1])
 end
 
 local function PrintOverlapFeedback(index)
@@ -789,6 +730,69 @@ local function PrintOverlapFeedback(index)
     end
 end
 
+local function WriteCircleCSV(path, data_table)
+    local file = io.open(path, "w+")
+    if file == nil then 
+        return console.log("Could not open file at path: " .. path)
+    end
+
+    console.clear()
+
+    for k = 1, #data_table do
+        local data = data_table[k]
+        if k == 1 then
+            console.log(data)
+        end
+        local line = data.x .. "," .. data.z
+        file:write(line .. "\n")
+    end
+
+    file:close()
+    
+    console.log("Wrote data to: " .. path)
+end
+
+local function WriteRegionCSV(path, data_table)
+    local file = io.open(path, "w+")
+    if file == nil then 
+        return console.log("Could not open file at path: " .. path)
+    end
+
+    for k = 1, #data_table do
+        local data = data_table[k]
+        console.log(data)
+        local line = data.x .. "," .. data.z .. "," .. data.w .. "," .. data.d
+        file:write(line .. "\n")
+    end
+
+    file:close()
+    
+    console.log("Wrote data to: " .. path)
+end
+
+local function WriteEncounterInfoToCSVs(circles, regions)
+    local map, submap = GetMapIDs()
+
+    local path_circles = "data/" .. map .. "-" .. submap .. "-circles"
+    local path_regions = "data/" .. map .. "-" .. submap .. "-regions"
+
+    WriteCircleCSV(path_circles, circles)
+    WriteRegionCSV(path_regions, regions)
+end
+
+
+local previous_keys = {}
+local function ProcessKeyboardInput()
+
+    local keys = input.get()
+
+    if keys["Space"] == true and previous_keys["Space"] ~= true then
+        WriteEncounterInfoToCSVs(current_encounter_centers, cached_regions)
+    end
+
+    previous_keys = input.get()
+end
+
 while true do
 
     local centers = GetLocalEnounterInfo()
@@ -799,6 +803,11 @@ while true do
         end
         PrintEncounterGrid(centers, MAP_GRID_WIDTH, MAP_GRID_HEIGHT, MAP_GRID_UNIT_SPACING, MAP_ANCHOR_Y, MAP_ANCHOR_X)
     end
-    
+
+    ProcessKeyboardInput()
+    gui.drawLine(20, 40, 28, 48, 0xFFFF0000) -- RED
+    -- Test 4: Diagonal line (45deg angle), width of 1px
+    gui.drawLine(48, 40, 40, 48, 0xFFFFFFFF) -- RED
+
     emu.frameadvance()
 end

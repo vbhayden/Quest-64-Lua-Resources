@@ -1,2 +1,3 @@
-*
-!.gitignore
+*.json
+*.json.npy
+*.csv

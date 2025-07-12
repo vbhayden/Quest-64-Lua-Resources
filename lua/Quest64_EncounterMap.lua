@@ -838,6 +838,9 @@ while true do
     end
 
     ProcessKeyboardInput()
+    -- gui.drawLine(20, 40, 28, 48, 0xFFFF0000) -- RED
+    -- -- Test 4: Diagonal line (45deg angle), width of 1px
+    -- gui.drawLine(48, 40, 40, 48, 0xFFFFFFFF) -- RED
 
     emu.frameadvance()
 end

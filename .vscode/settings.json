@@ -15,5 +15,15 @@
         "screenwidth",
         "SHILF",
         "SOLVARING"
+    ],
+    "Lua.diagnostics.globals": [
+        "memory",
+        "console",
+        "joypad",
+        "input",
+        "client",
+        "gui",
+        "emu",
+        "bit"
     ]
 }

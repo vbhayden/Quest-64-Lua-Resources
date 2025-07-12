@@ -1,18 +1,12 @@
-local MEM_PTR_MAP_DATA_MAIN = 0x07C284
-local MEM_PTR_MAP_DATA_VEGETATION = 0x07C290
-local MEM_PTR_MAP_DATA_NAVIGATION = 0x07C298
+local MEM_PTR_MAP_DATA_MAIN = 0x084F18
+local MEM_PTR_MAP_DATA_VEGETATION = 0x084F24
+local MEM_PTR_MAP_DATA_NAVIGATION = 0x084F2C
 
-local MEM_SPIRIT_INFO_START = 0x859B0
+local MEM_CURRENT_MAP_ID = 0x08536B
+local MEM_CURRENT_SUBMAP_ID = 0x08536F
 
-local MEM_CHEST_COUNT = 0x085950
-local MEM_CHEST_INFO_START = 0x085290
-
-local MEM_GAME_STATE = 0x4DCA0
-local MEM_ALLOW_BATTLES = 0x0842E8
-
-local MEM_CURRENT_MAP_ID = 0x0842BF
-local MEM_CURRENT_SUBMAP_ID = 0x0842C3
-
+local MEM_GAME_STATE = 0x07B2E4
+local MEM_ALLOW_BATTLES = 0x084F10
 
 local function IsGameBusy()
     local state = memory.read_u32_be(MEM_GAME_STATE, "RDRAM")
@@ -51,8 +45,8 @@ end
 
 local function GetEncounterPointers()
 
-    local ptr_region_data = GetPointerFromAddress(0x08BF98)
-    local ptr_circle_data = GetPointerFromAddress(0x08BF9C)
+    local ptr_region_data = GetPointerFromAddress(0x08C560)
+    local ptr_circle_data = GetPointerFromAddress(0x08C564)
 
     local data = {
         ptr_region_start = GetPointerFromAddress(ptr_region_data),
@@ -150,48 +144,48 @@ local function GetEncounterCirclesFromMemory()
     return encounter_centers
 end
 
-local function ReadSpiritsFromMemory()
+-- local function ReadSpiritsFromMemory()
 
-    local spirit_count = memory.read_u32_be(MEM_SPIRIT_INFO_START, "RDRAM")
-    local spirits = {}
+--     local spirit_count = memory.read_u32_be(MEM_SPIRIT_INFO_START, "RDRAM")
+--     local spirits = {}
 
-    local spirit_index = 0
-    while spirit_index < spirit_count do
-        local spirit_coord_ptr = MEM_SPIRIT_INFO_START + 0x8 + 0x18 * spirit_index
+--     local spirit_index = 0
+--     while spirit_index < spirit_count do
+--         local spirit_coord_ptr = MEM_SPIRIT_INFO_START + 0x8 + 0x18 * spirit_index
         
-        spirits[#spirits+1] = {
-            x = memory.readfloat(spirit_coord_ptr + 0x0, true, "RDRAM"),
-            y = memory.readfloat(spirit_coord_ptr + 0x4, true, "RDRAM"),
-            z = memory.readfloat(spirit_coord_ptr + 0x8, true, "RDRAM")
-        }
+--         spirits[#spirits+1] = {
+--             x = memory.readfloat(spirit_coord_ptr + 0x0, true, "RDRAM"),
+--             y = memory.readfloat(spirit_coord_ptr + 0x4, true, "RDRAM"),
+--             z = memory.readfloat(spirit_coord_ptr + 0x8, true, "RDRAM")
+--         }
 
-        spirit_index = spirit_index + 1
-    end
+--         spirit_index = spirit_index + 1
+--     end
 
-    return spirits
-end
+--     return spirits
+-- end
 
-local function ReadChestsFromMemory()
+-- local function ReadChestsFromMemory()
 
-    local chest_count = memory.read_u32_be(MEM_CHEST_COUNT, "RDRAM")
-    local chests = {}
+--     local chest_count = memory.read_u32_be(MEM_CHEST_COUNT, "RDRAM")
+--     local chests = {}
 
-    local chest_index = 0
-    while chest_index < chest_count do
-        local chest_coord_ptr = MEM_CHEST_INFO_START + 0x6C * chest_index
+--     local chest_index = 0
+--     while chest_index < chest_count do
+--         local chest_coord_ptr = MEM_CHEST_INFO_START + 0x6C * chest_index
         
-        chests[#chests+1] = {
-            x = memory.readfloat(chest_coord_ptr + 0x0, true, "RDRAM"),
-            y = memory.readfloat(chest_coord_ptr + 0x4, true, "RDRAM"),
-            z = memory.readfloat(chest_coord_ptr + 0x8, true, "RDRAM"),
-            angle = memory.readfloat(chest_coord_ptr + 0x10, true, "RDRAM")
-        }
+--         chests[#chests+1] = {
+--             x = memory.readfloat(chest_coord_ptr + 0x0, true, "RDRAM"),
+--             y = memory.readfloat(chest_coord_ptr + 0x4, true, "RDRAM"),
+--             z = memory.readfloat(chest_coord_ptr + 0x8, true, "RDRAM"),
+--             angle = memory.readfloat(chest_coord_ptr + 0x10, true, "RDRAM")
+--         }
 
-        chest_index = chest_index + 1
-    end
+--         chest_index = chest_index + 1
+--     end
 
-    return chests
-end
+--     return chests
+-- end
 
 local function ReadNavMesh()
 
@@ -378,11 +372,11 @@ while true do
         local chains = ReadNavMesh()
         local circles = GetEncounterCirclesFromMemory()
         local regions = GetEncounterRegionsFromMemory()
-        local spirits = ReadSpiritsFromMemory()
-        local chests = ReadChestsFromMemory()
+        -- local spirits = ReadSpiritsFromMemory()
+        -- local chests = ReadChestsFromMemory()
 
-        local filepath = "data/jp/mapdata-" .. map .. "-" .. submap .. ".json"
-        WriteMapData(filepath, chains, circles, regions, spirits, chests)
+        local filepath = "data/us/mapdata-" .. map .. "-" .. submap .. ".json"
+        WriteMapData(filepath, chains, circles, regions, {}, {})
 
         previous_map = map
         previous_submap = submap
