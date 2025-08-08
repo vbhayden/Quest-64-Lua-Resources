@@ -328,19 +328,19 @@ local function GetMapModelData()
     local ptr_map_models = GetPointerFromAddress(MEM_PTR_MAP_DATA_MODELS)
 
     return {
-        unk0 = memory.read_u16_be(ptr_map_models + 0x0, "RDRAM"),
-        unk2 = memory.read_u16_be(ptr_map_models + 0x2, "RDRAM"),
-        unk4 = memory.read_u16_be(ptr_map_models + 0x4, "RDRAM"),
-        unk6 = memory.read_u16_be(ptr_map_models + 0x6, "RDRAM"),
-        unk8 = memory.readfloat(ptr_map_models + 0x8, true, "RDRAM"),
-        unkC = memory.readfloat(ptr_map_models + 0xC, true, "RDRAM"),
-        unk10 = memory.readfloat(ptr_map_models + 0x10, true, "RDRAM"),
-        unk14 = memory.readfloat(ptr_map_models + 0x14, true, "RDRAM"),
-        unk18 = GetPointerFromAddress(ptr_map_models + 0x18),
-        unk1C = GetPointerFromAddress(ptr_map_models + 0x1C),
-        unk20 = GetPointerFromAddress(ptr_map_models + 0x20),
-        unk24 = GetPointerFromAddress(ptr_map_models + 0x24),
-        unk28 = memory.read_u16_be(ptr_map_models + 0x28, "RDRAM"),
+        unk0 = memory.read_u16_be(ptr_map_models + 0x0, "RDRAM"),       -- ?
+        unk2 = memory.read_u16_be(ptr_map_models + 0x2, "RDRAM"),       -- Non-Tile Model Count?
+        unk4 = memory.read_u16_be(ptr_map_models + 0x4, "RDRAM"),       -- Columns
+        unk6 = memory.read_u16_be(ptr_map_models + 0x6, "RDRAM"),       -- Rows
+        unk8 = memory.readfloat(ptr_map_models + 0x8, true, "RDRAM"),   -- Min X Bound
+        unkC = memory.readfloat(ptr_map_models + 0xC, true, "RDRAM"),   -- Min Z Bound
+        unk10 = memory.readfloat(ptr_map_models + 0x10, true, "RDRAM"), -- Map Tile Width (X-axis)
+        unk14 = memory.readfloat(ptr_map_models + 0x14, true, "RDRAM"), -- Map Tile Depth (Z-axis)
+        unk18 = GetPointerFromAddress(ptr_map_models + 0x18),           -- ?
+        unk1C = GetPointerFromAddress(ptr_map_models + 0x1C),           -- PTR - Tile Start Address
+        unk20 = GetPointerFromAddress(ptr_map_models + 0x20),           -- PTR - Terrain Start Address?
+        unk24 = GetPointerFromAddress(ptr_map_models + 0x24),           -- PTR - Non-Tile Start Address
+        unk28 = memory.read_u16_be(ptr_map_models + 0x28, "RDRAM"),     -- Is Map Tiled?
     }
 end
 
@@ -438,7 +438,7 @@ local function GetModelInfo(arg0, arg1, flags, model_index, motion_data)
     local terrain_has_collision = bit.band(var_a0.unk16, 0xFF) < 0x10
     local triangles = GetModelTriangles(local_x, local_z, model_scale, flags, var_v0, motion_data)
 
-    console.log(model_index .. ": " .. #triangles)
+    -- console.log(model_index .. ": " .. #triangles)
 
     return {
         triangles = triangles,
@@ -458,6 +458,14 @@ local function GetBrianLocation()
     return { x=x, y=y, z=z }
 end
 
+local function ToInt(number)
+    if number >= 0 then
+        return math.floor(number)
+    else
+        return math.ceil(number)
+    end
+end
+
 local function ReadElevationData()
 
     local temp_v0 = GetMapModelData()
@@ -469,22 +477,36 @@ local function ReadElevationData()
 
     if temp_v0.unk28 == 0 then
         var_s1 = temp_v0.unk20
-        -- console.log(string.format("var_s1: %08X", s1))
+        console.log(string.format("var_s1: %08X", var_s1))
     else
         -- var_v1 = (s32) ((var_f20 - temp_v0->unk8) / temp_v0->unk10);
         -- var_a1 = (s32) ((var_f22 - temp_v0->unkC) / temp_v0->unk14);
-        -- var_s1 = (*(temp_v0->unk1C + (((temp_v0->unk4 * var_a1) + var_v1) * 2)) * 2) + temp_v0->unk20;
-        v1 = math.floor((brian.x - temp_v0.unk8) / temp_v0.unk10)
-        a1 = math.floor((brian.z - temp_v0.unkC) / temp_v0.unk14)
-        var_s1 = ((temp_v0.unk1C + (((temp_v0.unk4 * a1) + v1) * 2)) * 2) + temp_v0.unk20
-
-        -- local odd_address = temp_v0.unk1C + (((temp_v0.unk4 * a1) + v1) * 2)
-
-        -- console.log(string.format("var_s1: %08X, WEIRD CASE", var_s1))
-        -- console.log(string.format(".unk1C: %08X", temp_v0.unk1C))
-        -- console.log(string.format(".unk20: %08X", temp_v0.unk20))
+        -- var_s1 = (  *(temp_v0->unk1C + (((temp_v0->unk4 * var_a1) + var_v1) * 2)) * 2  ) + temp_v0->unk20;
+        -- v1 = math.floor((brian.x - temp_v0.unk8) / temp_v0.unk10)
+        -- a1 = math.floor((brian.z - temp_v0.unkC) / temp_v0.unk14)
+        -- var_s1 = ((temp_v0.unk1C + (((temp_v0.unk4 * a1) + v1) * 2)) * 2) + temp_v0.unk20
+        var_s1 = (memory.read_u16_be(temp_v0.unk1C, "RDRAM") * 2) + temp_v0.unk20
         
-        var_s1 = temp_v0.unk20
+        local tile_x = ToInt((brian.x - temp_v0.unk8) / temp_v0.unk10)
+        local tile_z = ToInt((brian.z - temp_v0.unkC) / temp_v0.unk14)
+        local tile_start = temp_v0.unk1C
+        local tile_columns = temp_v0.unk4
+        local tile_index = tile_columns * tile_z + tile_x
+        local tile_address = tile_start + tile_index * 2
+        local model_offset = memory.read_u16_be(tile_address, "RDRAM") * 2
+        local model_address = model_offset + temp_v0.unk20
+
+        console.log("X: " .. tile_x)
+        console.log("Z: " .. tile_z)
+        console.log("Start: " .. tile_start)
+        console.log("Rows: " .. temp_v0.unk6)
+        console.log("Columns: " .. tile_columns)
+        console.log("Index: " .. tile_index)
+        console.log(string.format("Tile Address: %08X", tile_address))
+        console.log("Model Offset: " .. model_offset)
+        console.log(string.format("Model Address: %08X", model_address))
+
+        var_s1 = model_address
     end
 
     local model_count = 0
@@ -503,8 +525,6 @@ local function ReadElevationData()
         console.log(string.format("%08X", var_s1))
         console.log(var_s0)
 
-        -- console.log(string.format("%04X, %08X", s0, s1_2))
-
         while var_s0 ~= 0 do
             local temp_a3 = memory.read_u16_be(var_s1_2, "RDRAM")
             var_s1_2 = var_s1_2 + 2
@@ -516,7 +536,7 @@ local function ReadElevationData()
 
             if #model_info.triangles > 0 then
                 elevation_models[#elevation_models+1] = model_info
-                console.log("found! " .. #model_info.triangles)
+                console.log("found! " .. #model_info.triangles .. " triangles!")
             end
         end
     end
