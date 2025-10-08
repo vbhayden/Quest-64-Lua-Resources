@@ -522,30 +522,7 @@ local function GetLocalEnounterInfo()
 end
 
 local function GetTrimmedCenters(regional_blocks, brian, width, height)
-
-
     local neighboring = GetNeighboringCenters(brian.x, brian.z, regional_blocks)
-
-    -- local trimmed = {}
-
-    -- local visible_width = width + 80
-    -- local visible_height = height + 80
-
-    -- local visible_width_sqr = visible_width * visible_width
-    -- local visible_height_sqr = visible_height * visible_height
-
-    -- for _, coord in pairs(neighboring) do
-    --     local dx = brian.x - coord.x
-    --     local dz = brian.z - coord.z
-
-    --     local within_width = dx * dx < visible_width_sqr
-    --     local within_height = dz * dz < visible_height_sqr
-
-    --     if within_width and within_height then
-    --         trimmed[#trimmed+1] = coord
-    --     end
-    -- end
-
     return neighboring
 end
 
@@ -559,81 +536,6 @@ EMPTY_RESULT = {
     region_index = -1,
     overlaps = 0
 }
-
-local function GetCollidingEncounters(centers, sample_x, sample_z, movement_radius)
-
-    local nothing_here = false
-    local region_index = -1
-    
-    region_index = GetRegionOverlapIndex(sample_x, sample_z)
-    if region_index < 0 then
-        nothing_here = true
-    -- elseif centers == nil or #centers == 0 then
-    --     nothing_here = true
-    end
-
-    if nothing_here then
-        return EMPTY_RESULT
-    end
-
-    local too_close = 0
-    local too_far = 0
-    local one_turns = 0
-    local two_turns = 0
-    local three_turns = 0
-    -- local colliding = {}
-
-    local min_distance_sqr = 50 * 50
-    local max_distance_sqr = 90 * 90
-    local one_turn_distance_sqr = (100 - movement_radius) * (100 - movement_radius)
-    local two_turn_distance_sqr = (100 - 2 * movement_radius) * (100 - 2 * movement_radius)
-
-    local color = "white"
-
-    for _, coord in pairs(centers) do
-
-        local dx = sample_x - coord.x
-        local dz = sample_z - coord.z
-        local distance_sqr = dx * dx + dz * dz
-
-        if distance_sqr < min_distance_sqr then
-            too_close = too_close + 1
-
-        elseif distance_sqr < max_distance_sqr and distance_sqr >= min_distance_sqr then
-
-            if distance_sqr > one_turn_distance_sqr then
-                one_turns = one_turns + 1
-            elseif distance_sqr > two_turn_distance_sqr then
-                two_turns = two_turns + 1
-            else
-                three_turns = three_turns + 1
-            end
-            
-            -- colliding[#colliding + 1] = coord
-        end
-    end
-
-    if three_turns > 0 then
-        color = "red"
-    elseif two_turns > 0 then
-        color = "orange"
-    elseif one_turns > 0 then
-        color = "yellow"
-    else
-        color = "white"
-    end
-
-    return {
-        color = color,
-        too_close = too_close,
-        too_far = too_far,
-        one_turns = one_turns,
-        two_turns = two_turns,
-        three_turns = three_turns,
-        region_index = region_index,
-        overlaps = one_turns + two_turns + three_turns
-    }
-end
 
 local function GetOverlapColor(one_turns, two_turns, three_turns, region_index)
 
@@ -682,19 +584,25 @@ local function PrintEncounterGrid(centers, grid_width, grid_height, unit_spacing
 
     -- console.log(screen_width)
 
-    local UNITS_TO_PIXELS = 0.2
-    local BRIAN_MAP_SIZE = 10
+    local UNITS_TO_PIXELS = 0.8
+    local BRIAN_MAP_SIZE = 4
 
     local navmesh = ReadNavMesh()
+    local brian_movement_size = movement_radius * UNITS_TO_PIXELS
+    local brian_movement_size_boots = 2 * movement_radius * UNITS_TO_PIXELS
 
-    gui.drawEllipse(center_x - BRIAN_MAP_SIZE * UNITS_TO_PIXELS, center_z - BRIAN_MAP_SIZE * UNITS_TO_PIXELS, 10, 10, 0xFF00FFFF)
+    -- Draw Brian
+    --
+    gui.drawEllipse(center_x - BRIAN_MAP_SIZE / 2, center_z - BRIAN_MAP_SIZE / 2, BRIAN_MAP_SIZE, BRIAN_MAP_SIZE, 0xFF00FFFF)
+    gui.drawEllipse(center_x - brian_movement_size, center_z - brian_movement_size, 2 * brian_movement_size, 2 * brian_movement_size, 0xFF00AAFF)
+    gui.drawEllipse(center_x - brian_movement_size_boots, center_z - brian_movement_size_boots, 2 * brian_movement_size_boots, 2 * brian_movement_size_boots, 0xFFFF00FF)
 
     for c, circle in pairs(trimmed_centers) do
 
-        local cx = (circle.x - brian_x - 50) * UNITS_TO_PIXELS + center_x
-        local cz = (circle.z - brian_z - 50) * UNITS_TO_PIXELS + center_z
+        local cx = (circle.x - brian_x - 90) * UNITS_TO_PIXELS + center_x
+        local cz = (circle.z - brian_z - 90) * UNITS_TO_PIXELS + center_z
 
-        gui.drawEllipse(cx, cz, 100 * UNITS_TO_PIXELS, 100 * UNITS_TO_PIXELS, 0xFFFF0000)
+        gui.drawEllipse(cx, cz, 180 * UNITS_TO_PIXELS, 180 * UNITS_TO_PIXELS, 0xFFFF0000)
     end
 
     for k, wall_chain in pairs(navmesh) do
@@ -805,9 +713,6 @@ while true do
     end
 
     ProcessKeyboardInput()
-    gui.drawLine(20, 40, 28, 48, 0xFFFF0000) -- RED
-    -- Test 4: Diagonal line (45deg angle), width of 1px
-    gui.drawLine(48, 40, 40, 48, 0xFFFFFFFF) -- RED
 
     emu.frameadvance()
 end

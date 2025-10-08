@@ -437,18 +437,19 @@ while true do
     local resulting_distance = current_agi_distance + current_combat_agi_distance
     local resulting_xp = math.floor((current_agi_distance + current_combat_agi_distance) / 50)
 
-    GuiText(16, "Agi Glitch Distances:  ")
-    GuiText(17, "-------------------------:  ")
-    GuiText(18, "Current AGI XP: " .. agi_xp)
-    GuiText(19, "Current AGI Progress: " .. Round(current_agi_distance, 2))
-    GuiText(20, "Combat AGI Distance:  " .. Round(current_combat_agi_distance, 2))
-    GuiText(21, "Converted XP:         " .. Round(current_combat_agi_distance / 50, 2))
-    
-    GuiTextWithColor(23, "Resulting AGI Distance: " .. Round(resulting_distance, 2), "cyan")
-    GuiTextWithColor(24, "Resulting AGI XP Bonus: " .. resulting_xp, "cyan")
+    local row = 20
 
-    GuiTextWithColor(25, "Leftover AGI Distance: " .. Round(resulting_distance % 50, 2), "yellow")
-    GuiTextWithColor(26, "Updated AGI XP: " .. (agi_xp + resulting_xp), "yellow")
+    GuiText(row + 0, "Agi Glitch Distances:  ")
+    GuiText(row + 1, "-------------------------:  ")
+    GuiText(row + 2, "Current AGI XP: " .. agi_xp)
+    GuiText(row + 3, "Current AGI Progress: " .. Round(current_agi_distance, 2))
+    GuiText(row + 4, "Combat AGI Distance:  " .. Round(current_combat_agi_distance, 2))
+    GuiText(row + 5, "Converted XP:         " .. Round(current_combat_agi_distance / 50, 2))
+    
+    GuiTextWithColor(row + 7, "Resulting AGI Distance: " .. Round(resulting_distance, 2), "cyan")
+    GuiTextWithColor(row + 8, "Resulting AGI XP Bonus: " .. resulting_xp, "cyan")
+    GuiTextWithColor(row + 9, "Leftover AGI Distance: " .. Round(resulting_distance % 50, 2), "yellow")
+    GuiTextWithColor(row + 10, "Updated AGI XP: " .. (agi_xp + resulting_xp), "yellow")
 
     emu.frameadvance()
 end

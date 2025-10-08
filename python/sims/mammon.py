@@ -27,9 +27,9 @@ BRIAN_HP = 146
 BRIAN_MP = 19
 BRIAN_AGILITY = 99
 BRIAN_DEFENSE = 10
-BRIAN_FIRE = 4
+BRIAN_FIRE = 1
 BRIAN_EARTH = 50
-BRIAN_WATER = 49
+BRIAN_WATER = 46
 BRIAN_WIND = 37
 BRIAN_STAFF_POWER = 16
 TOTAL_ELEMENTS = BRIAN_FIRE + BRIAN_EARTH + BRIAN_WATER + BRIAN_WIND
@@ -72,6 +72,8 @@ DECISION_MELEE = 6
 DECISION_WATER_1 = 7
 DECISION_ROCK_1 = 8
 DECISION_PASS = 9
+DECISION_DRAIN_MAGIC = 0xA
+DECISION_EVADE_2 = 0xC
 
 decision_map = {
     DECISION_BARRIER: "Barrier",
@@ -84,6 +86,8 @@ decision_map = {
     DECISION_WATER_1: "Water 1",
     DECISION_ROCK_1: "Rock 1",
     DECISION_PASS: "Pass",
+    DECISION_DRAIN_MAGIC: "Drain Magic",
+    DECISION_EVADE_2: "Evade Lvl. 2",
 }
 
 def get_decision_text(decision_code):
@@ -540,6 +544,19 @@ def simulate_confusion(seed):
     return True, hit_roll, turns, advance_rng_30(turn_seed)
 
 @njit()
+def simulate_evade_2(seed):
+
+    hit_seed = next_rng(seed)
+    hit_roll = roll_rng(hit_seed, 100)
+    if hit_roll >= 90:
+        return False, hit_roll, 0, advance_rng_30(hit_seed)
+    
+    turn_seed = next_rng(hit_seed)
+    turns = 2 + roll_rng(turn_seed, 5)
+    
+    return True, hit_roll, turns, turn_seed
+
+@njit()
 def simulate_weakness(seed):
     
     hit_seed = next_rng(seed)
@@ -841,6 +858,13 @@ def simulate_brian_turn_explicit(seed, decision_code, can_attack, brian_stats, b
     elif decision_code == DECISION_HEALING_ITEM:
         brian_stats[0] = BRIAN_HP
         return seed
+
+    elif decision_code == DECISION_EVADE_2:
+        evade_hit, evade_roll, evade_turns, evade_seed = simulate_evade_2(seed)
+        brian_stats[1] -= 3
+        if evade_hit:
+            brian_buffs[2] = evade_turns + 1
+        return evade_seed
 
     return seed
 
@@ -1230,9 +1254,10 @@ def main():
     start = time.time()
     
     # seed = 0x084C487C
-    seed = 0xEB0B64F2
+    # seed = 0xEB0B64F2
     # seed = 0x9C954C28
-    
+    seed = 0x9BFE65A6
+
     # success, turns, decisions = sim_mammon_randomly(seed, 20)
     # print(f"{seed:8X}--------") 
     # print(f"{success=} {turns=}")

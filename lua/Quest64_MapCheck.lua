@@ -304,7 +304,7 @@ local function GetMapVegetationData()
     local ptr_2 = memory.read_u32_be(MEM_LOADED_MODELS_ARRAY_PTR, "RDRAM")
     local ptr_models_count = GetPointerFromAddress(MEM_PTR_MAP_DATA_MODELS)
     local ptr_models_array = GetPointerFromAddress(MEM_LOADED_MODELS_ARRAY_PTR)
-
+ 
     if bit.band(ptr_1, 0X80000000) == 0x80000000 then
 
         local models_count = memory.read_u16_be(ptr_models_count, "RDRAM")
@@ -322,6 +322,63 @@ local function GetMapVegetationData()
     end
 
     return vegetation
+end
+
+local function GetMapCameraConfigs()
+
+    local ptr_camera_zones = GetPointerFromAddress(0x086EDC)
+    local num_camera_zones = memory.read_u32_be(0x086B88, "RDRAM")
+
+    local ZONE_STRUCT_LENGTH = 0x38
+
+    local zones = {}
+
+    for k=0, num_camera_zones - 1 do
+        
+        local ptr_zone = ptr_camera_zones + k * ZONE_STRUCT_LENGTH
+        zones[#zones+1] = {
+            mode = memory.read_u32_be(ptr_zone + 0x00, "RDRAM"),
+            fixedX = memory.readfloat(ptr_zone + 0x04, true, "RDRAM"),
+            fixedY = memory.readfloat(ptr_zone + 0x08, true, "RDRAM"),
+            fixedZ = memory.readfloat(ptr_zone + 0x0C, true, "RDRAM"),
+
+            focusHeight = memory.readfloat(ptr_zone + 0x10, true, "RDRAM"),
+            cameraHeight = memory.readfloat(ptr_zone + 0x14, true, "RDRAM"),
+            planarDistance = memory.readfloat(ptr_zone + 0x18, true, "RDRAM"),
+            
+            minAngleX = memory.readfloat(ptr_zone + 0x1C, true, "RDRAM"),
+            maxAngleX = memory.readfloat(ptr_zone + 0x20, true, "RDRAM"),
+            minAngleY = memory.readfloat(ptr_zone + 0x24, true, "RDRAM"),
+            maxAngleY = memory.readfloat(ptr_zone + 0x28, true, "RDRAM"),
+            
+            verticalFOV = memory.readfloat(ptr_zone + 0x2C, true, "RDRAM"),
+            nearClipDistance = memory.readfloat(ptr_zone + 0x30, true, "RDRAM"),
+            farClipDistance = memory.readfloat(ptr_zone + 0x34, true, "RDRAM"),
+        }
+    end
+
+    local combat_settings = {
+        distanceAdjustment = 0,
+        heightAdjustment = 0,
+    }
+    
+    if AreBattlesAllowed() then
+
+        local combat_adjustment_offset = memory.read_u32_be(0x84EE4, "RDRAM")
+        local ptr_combat_adjustment_base = 0x4D0A0
+        local ptr_combat_adjustment = combat_adjustment_offset * 0xC + ptr_combat_adjustment_base
+
+        local adj_elevation = memory.readfloat(ptr_combat_adjustment + 0x0, true, "RDRAM")
+        local adj_distance = memory.readfloat(ptr_combat_adjustment + 0x4, true, "RDRAM")
+        
+        combat_settings.distanceAdjustment = adj_distance
+        combat_settings.heightAdjustment = adj_elevation
+    end
+
+    return {
+        zones = zones,
+        combat = combat_settings
+    }
 end
 
 local function GetMapModelData()
@@ -365,7 +422,7 @@ local function GetFaceData(address)
     }
 end
 
-local function GetModelTriangles(x, z, scale, flags, arg4_address, arg5)
+local function GetModelFaces(x, z, scale, flags, arg4_address, arg5)
 
     local arg4 = {
         unk0 = memory.read_u16_be(arg4_address + 0x0, "RDRAM"),
@@ -385,29 +442,37 @@ local function GetModelTriangles(x, z, scale, flags, arg4_address, arg5)
     local vertex_data_length = 0x8
 
     local triangle_count = arg4.unk18
-    local triangles = {}
+    local faces = {}
+
+    -- console.log(string.format("Triangle Data at %08X:: %04d faces", arg4_address, triangle_count))
 
     if triangle_count ~= 0 then
         
         for triangle_index = 0,triangle_count - 1 do
-            
-            local var_s1 = GetFaceData(arg4.unk14 + face_data_length * triangle_index)
-            if bit.band(var_s1.unk6, flags) then
-                
-                local vert_a = GetVertexData(arg4.unk1C + var_s1.unk0 * vertex_data_length)
-                local vert_b = GetVertexData(arg4.unk1C + var_s1.unk2 * vertex_data_length)
-                local vert_c = GetVertexData(arg4.unk1C + var_s1.unk4 * vertex_data_length)
 
-                triangles[#triangles+1] = {
-                    { x = vert_a.unk0, y = vert_a.unk2, z = vert_a.unk4 },
-                    { x = vert_b.unk0, y = vert_b.unk2, z = vert_b.unk4 },
-                    { x = vert_c.unk0, y = vert_c.unk2, z = vert_c.unk4 },
-                }
+            if arg4.unk14 ~= 0 then
+
+                local var_s1 = GetFaceData(arg4.unk14 + face_data_length * triangle_index)
+                
+                if bit.band(var_s1.unk6, flags) then
+                    
+                    local vert_a = GetVertexData(arg4.unk1C + var_s1.unk0 * vertex_data_length)
+                    local vert_b = GetVertexData(arg4.unk1C + var_s1.unk2 * vertex_data_length)
+                    local vert_c = GetVertexData(arg4.unk1C + var_s1.unk4 * vertex_data_length)
+
+                    faces[#faces+1] = {
+                        x1 = vert_a.unk0, y1 = vert_a.unk2, z1 = vert_a.unk4,
+                        x2 = vert_b.unk0, y2 = vert_b.unk2, z2 = vert_b.unk4,
+                        x3 = vert_c.unk0, y3 = vert_c.unk2, z3 = vert_c.unk4,
+                        zone = bit.band(bit.rshift(var_s1.unk6, 1), 0x7)
+                    }
+                end
             end
+            
         end
     end
 
-    return triangles
+    return faces
 end
 
 local function GetModelInfo(arg0, arg1, flags, model_index, motion_data)
@@ -434,14 +499,16 @@ local function GetModelInfo(arg0, arg1, flags, model_index, motion_data)
     local model_scale = var_a0.unk10
 
     local var_v0 = bit.lshift(var_a0.unk14, 5) + GetPointerFromAddress(0x84F28)
+    
+    -- console.log(string.format("var_v0: %08X", var_v0))
 
     local terrain_has_collision = bit.band(var_a0.unk16, 0xFF) < 0x10
-    local triangles = GetModelTriangles(local_x, local_z, model_scale, flags, var_v0, motion_data)
+    local faces = GetModelFaces(local_x, local_z, model_scale, flags, var_v0, motion_data)
 
     -- console.log(model_index .. ": " .. #triangles)
 
     return {
-        triangles = triangles,
+        faces = faces,
         scale = var_a0.unk10,
         angle = var_a0.unkC,
         x = model_x,
@@ -458,14 +525,6 @@ local function GetBrianLocation()
     return { x=x, y=y, z=z }
 end
 
-local function ToInt(number)
-    if number >= 0 then
-        return math.floor(number)
-    else
-        return math.ceil(number)
-    end
-end
-
 local function ReadElevationData()
 
     local temp_v0 = GetMapModelData()
@@ -475,76 +534,90 @@ local function ReadElevationData()
     local a1 = 0
     local var_s1 = 0
 
+    local model_count = 0
+    local elevation_models = {}
+
     if temp_v0.unk28 == 0 then
-        var_s1 = temp_v0.unk20
-        console.log(string.format("var_s1: %08X", var_s1))
+        console.log("Elevation Models are NOT Tiled ...")
+
+        local var_s1 = temp_v0.unk20
+
+        local var_s0 = memory.read_u16_be(var_s1, "RDRAM")
+        local var_s1_2 = var_s1 + 2
+
+        -- console.log(string.format("var_s1: %08X", var_s1))
+        -- console.log(string.format("models: %d", var_s0))
+
+        while var_s0 ~= 0 do
+            
+            local temp_a3 = memory.read_u16_be(var_s1_2, "RDRAM")
+            var_s1_2 = var_s1_2 + 2
+            var_s0 = var_s0 - 1
+            
+            -- console.log(string.format("temp_a3: %d", temp_a3))
+
+            model_count = model_count + 1
+
+            local model_info = GetModelInfo(brian.x, brian.z, 0xFFFF, temp_a3, {})
+
+            if #model_info.faces > 0 then
+                elevation_models[#elevation_models+1] = model_info
+                console.log("found! " .. #model_info.faces .. " triangles!")
+            end
+        end
     else
+        
+        console.log("Elevation Models are Tiled ...")
+
         -- var_v1 = (s32) ((var_f20 - temp_v0->unk8) / temp_v0->unk10);
         -- var_a1 = (s32) ((var_f22 - temp_v0->unkC) / temp_v0->unk14);
         -- var_s1 = (  *(temp_v0->unk1C + (((temp_v0->unk4 * var_a1) + var_v1) * 2)) * 2  ) + temp_v0->unk20;
         -- v1 = math.floor((brian.x - temp_v0.unk8) / temp_v0.unk10)
         -- a1 = math.floor((brian.z - temp_v0.unkC) / temp_v0.unk14)
         -- var_s1 = ((temp_v0.unk1C + (((temp_v0.unk4 * a1) + v1) * 2)) * 2) + temp_v0.unk20
-        var_s1 = (memory.read_u16_be(temp_v0.unk1C, "RDRAM") * 2) + temp_v0.unk20
-        
-        local tile_x = ToInt((brian.x - temp_v0.unk8) / temp_v0.unk10)
-        local tile_z = ToInt((brian.z - temp_v0.unkC) / temp_v0.unk14)
+        -- var_s1 = (memory.read_u16_be(temp_v0.unk1C, "RDRAM") * 2) + temp_v0.unk20
+
         local tile_start = temp_v0.unk1C
         local tile_columns = temp_v0.unk4
-        local tile_index = tile_columns * tile_z + tile_x
-        local tile_address = tile_start + tile_index * 2
-        local model_offset = memory.read_u16_be(tile_address, "RDRAM") * 2
-        local model_address = model_offset + temp_v0.unk20
+        local tile_rows = temp_v0.unk6
+        local tile_count = tile_columns * tile_rows
 
-        console.log("X: " .. tile_x)
-        console.log("Z: " .. tile_z)
-        console.log("Start: " .. tile_start)
-        console.log("Rows: " .. temp_v0.unk6)
-        console.log("Columns: " .. tile_columns)
-        console.log("Index: " .. tile_index)
-        console.log(string.format("Tile Address: %08X", tile_address))
-        console.log("Model Offset: " .. model_offset)
-        console.log(string.format("Model Address: %08X", model_address))
+        for tile_index = 1, tile_count do
 
-        var_s1 = model_address
-    end
+            local tile_address = tile_start + tile_index * 2
+            local model_offset = memory.read_u16_be(tile_address, "RDRAM") * 2
+            local model_address = model_offset + temp_v0.unk20
+            
+            local var_s1 = model_address
 
-    local model_count = 0
-    local elevation_models = {}
+            local var_s0 = memory.read_u16_be(var_s1, "RDRAM")
+            local var_s1_2 = var_s1 + 2
 
 
-    if  v1 >= 0 
-    and v1 < temp_v0.unk4 
-    and a1 >= 0 
-    and a1 < temp_v0.unk6 then
+            while var_s0 ~= 0 do
+                
+                -- console.log(string.format("Tile %d: %08X, Count: %d", tile_index, var_s1, var_s0))
 
-        -- ::loop_17::
-        local var_s0 = memory.read_u16_be(var_s1, "RDRAM")
-        local var_s1_2 = var_s1 + 2
+                local temp_a3 = memory.read_u16_be(var_s1_2, "RDRAM")
+                var_s1_2 = var_s1_2 + 2
+                var_s0 = var_s0 - 1
 
-        console.log(string.format("%08X", var_s1))
-        console.log(var_s0)
+                model_count = model_count + 1
 
-        while var_s0 ~= 0 do
-            local temp_a3 = memory.read_u16_be(var_s1_2, "RDRAM")
-            var_s1_2 = var_s1_2 + 2
-            var_s0 = var_s0 - 1
+                local model_info = GetModelInfo(brian.x, brian.z, 0xFFFF, temp_a3, {})
 
-            model_count = model_count + 1
-
-            local model_info = GetModelInfo(brian.x, brian.z, 0xFFFF, temp_a3, {})
-
-            if #model_info.triangles > 0 then
-                elevation_models[#elevation_models+1] = model_info
-                console.log("found! " .. #model_info.triangles .. " triangles!")
+                if #model_info.faces > 0 then
+                    elevation_models[#elevation_models+1] = model_info
+                    console.log("found! " .. #model_info.faces .. " triangles!")
+                end
             end
         end
     end
 
+    -- return elevation_models
+
     local var_s0_2 = temp_v0.unk2
     local var_s1_3 = temp_v0.unk24
-
-    console.log(var_s0_2)
 
     while var_s0_2 ~= 0 do
 
@@ -554,14 +627,15 @@ local function ReadElevationData()
 
         local model_info = GetModelInfo(brian.x, brian.z, 0xFFFF, temp_a3_2, {})
     
-        if #model_info.triangles > 0 then
+        if #model_info.faces > 0 then
             elevation_models[#elevation_models+1] = model_info
-            console.log("found! " .. #model_info.triangles)
+            console.log("found! " .. #model_info.faces)
         end
     end
     
     return elevation_models
 end
+
 
 local function WriteMapData(path)
 
@@ -577,21 +651,54 @@ local function WriteMapData(path)
     local chests = ReadChestsFromMemory()
     local vegetation = GetMapVegetationData()
     local elevation_triangles = ReadElevationData()
+    local camera_configs = GetMapCameraConfigs()
 
     file:write("{\n")
 
     local last_char = ""
 
+
+    file:write('\t"cameraConfig": {\n')
+    file:write('\t\t"zones": [\n')
+    local zones = camera_configs.zones
+    for zone_index, zone in pairs(zones) do
+        local last_char = ","
+        if zone_index == #zones then last_char = "" else last_char = "," end
+        
+        file:write(string.format('\t\t\t{\n'))
+        file:write(string.format('\t\t\t\t"mode": %d,\n', zone.mode))
+        file:write(string.format('\t\t\t\t"fixedX": %.2f,\n', zone.fixedX))
+        file:write(string.format('\t\t\t\t"fixedY": %.2f,\n', zone.fixedY))
+        file:write(string.format('\t\t\t\t"fixedZ": %.2f,\n', zone.fixedZ))
+        file:write(string.format('\t\t\t\t"focusHeight": %.2f,\n', zone.focusHeight))
+        file:write(string.format('\t\t\t\t"cameraHeight": %.2f,\n', zone.cameraHeight))
+        file:write(string.format('\t\t\t\t"planarDistance": %.2f,\n', zone.planarDistance))
+        file:write(string.format('\t\t\t\t"minAngleX": %.2f,\n', zone.minAngleX))
+        file:write(string.format('\t\t\t\t"maxAngleX": %.2f,\n', zone.maxAngleX))
+        file:write(string.format('\t\t\t\t"minAngleY": %.2f,\n', zone.minAngleY))
+        file:write(string.format('\t\t\t\t"maxAngleY": %.2f,\n', zone.maxAngleY))
+        file:write(string.format('\t\t\t\t"verticalFOV": %.2f,\n', zone.verticalFOV))
+        file:write(string.format('\t\t\t\t"nearClipDistance": %.2f,\n', zone.nearClipDistance))
+        file:write(string.format('\t\t\t\t"farClipDistance": %.2f\n', zone.farClipDistance))
+        file:write(string.format('\t\t\t}%s\n', last_char))
+    end
+    file:write('\t\t],\n')
+    file:write('\t\t"combat": {\n')
+    file:write(string.format('\t\t\t"distanceAdjustment": %.2f,\n', camera_configs.combat.distanceAdjustment))
+    file:write(string.format('\t\t\t"heightAdjustment": %.2f\n', camera_configs.combat.heightAdjustment))
+    file:write('\t\t}\n')
+    file:write('\t},\n')
+
     
     file:write('\t"walls": [\n')
     for chain_index, geometry_chain in pairs(geometry_chains) do
-        file:write('\t\t[\n')
+        file:write('\t\t{"wall": [\n')
         for k, coord in pairs(geometry_chain) do
             if k == #geometry_chain then last_char = "" else last_char = "," end
             file:write(string.format('\t\t\t{"x": %.4f, "z": %.4f}%s\n', coord.x, coord.z, last_char))
         end
         if chain_index == #geometry_chains then last_char = "" else last_char = "," end
-        file:write(string.format('\t\t]%s\n', last_char))
+        file:write(string.format('\t\t]}%s\n', last_char))
     end
     file:write('\t],\n')
 
@@ -618,7 +725,7 @@ local function WriteMapData(path)
     for spirit_index, spirit in pairs(spirits) do
         local last_char = ","
         if spirit_index == #spirits then last_char = "" else last_char = "," end
-        file:write(string.format('\t\t{"x": %.4f, "z": %.4f}%s\n', spirit.x, spirit.z, last_char))
+        file:write(string.format('\t\t{"x": %.4f, "y": %.4f, "z": %.4f}%s\n', spirit.x, spirit.y, spirit.z, last_char))
     end    
     file:write('\t],\n')
     
@@ -627,7 +734,7 @@ local function WriteMapData(path)
     for chest_index, chest in pairs(chests) do
         local last_char = ","
         if chest_index == #chests then last_char = "" else last_char = "," end
-        file:write(string.format('\t\t{"x": %.4f, "z": %.4f, "angle": %.4f}%s\n', chest.x, chest.z, chest.angle, last_char))
+        file:write(string.format('\t\t{"x": %.4f, "y": %.4f, "z": %.4f, "angle": %.4f}%s\n', chest.x, chest.y, chest.z, chest.angle, last_char))
     end    
     file:write('\t],\n')
     
@@ -665,17 +772,18 @@ local function WriteMapData(path)
         file:write(string.format('\t\t{"x": %.4f, "y": %.4f, "z": %.4f, "angle": %.4f, "scale": %.2f, "triangles": [\n', 
             model.x, model.y, model.z, model.angle, model.scale))
         
-        for e_index, triangle in pairs(model.triangles) do
+        for e_index, face in pairs(model.faces) do
 
             local inner_last_char = ","
-            if e_index == #model.triangles then inner_last_char = "" else inner_last_char = "," end
-            file:write("\t\t\t[\n")
-            file:write(string.format('\t\t\t\t{"x": %.4f, "y": %.4f, "z": %.4f},\n', triangle[1].x, triangle[1].y, triangle[1].z))
-            file:write(string.format('\t\t\t\t{"x": %.4f, "y": %.4f, "z": %.4f},\n', triangle[2].x, triangle[2].y, triangle[2].z))
-            file:write(string.format('\t\t\t\t{"x": %.4f, "y": %.4f, "z": %.4f}\n',  triangle[3].x, triangle[3].y, triangle[3].z))
-            file:write(string.format('\t\t\t]%s\n', inner_last_char))
+            if e_index == #model.faces then inner_last_char = "" else inner_last_char = "," end
+            file:write("\t\t\t{\n")
+            file:write(string.format('\t\t\t\t"x1": %.4f, "y1": %.4f, "z1": %.4f,\n', face.x1, face.y1, face.z1))
+            file:write(string.format('\t\t\t\t"x2": %.4f, "y2": %.4f, "z2": %.4f,\n', face.x2, face.y2, face.z2))
+            file:write(string.format('\t\t\t\t"x3": %.4f, "y3": %.4f, "z3": %.4f,\n', face.x3, face.y3, face.z3))
+            file:write(string.format('\t\t\t\t"zone": %d\n', face.zone))
+            file:write(string.format('\t\t\t}%s\n', inner_last_char))
         end
-
+        
         file:write(string.format("\t\t]}%s\n", last_char))
 
     end
@@ -686,7 +794,7 @@ local function WriteMapData(path)
     file:close()
 end
 
-local busy_timeout = 30
+local busy_timeout = 60
 local busy_duration = 0
 local previous_map, previous_submap = -1, -1
 while true do
@@ -703,6 +811,8 @@ while true do
 
         local filepath = "data/us/mapdata-" .. map .. "-" .. submap .. ".json"
         WriteMapData(filepath)
+
+        -- PrintCurrentModelValues()
 
         previous_map = map
         previous_submap = submap

@@ -9,14 +9,14 @@ local MEM_ENEMY_POSITION_Y = 0x7C9C0
 local MEM_ENEMY_POSITION_Z = 0x7C9C4
 local MEM_ENEMY_ROTATION_Y = 0x7C9CC
 
-local MEM_BATTLE_LAST_X = 0x86B18
-local MEM_BATTLE_LAST_Z = 0x86B20
+local MEM_BATTLE_LAST_X = 0x8C5A4
+local MEM_BATTLE_LAST_Z = 0x8C430
 
-local MEM_BATTLE_CENTER_X = 0x880B8
-local MEM_BATTLE_CENTER_Z = 0x880D8
+local MEM_BATTLE_CENTER_X = 0x8C5A4
+local MEM_BATTLE_CENTER_Z = 0x8C430
 
-local MEM_CURRENT_MAP_ID = 0x08536B
-local MEM_CURRENT_SUBMAP_ID = 0x08536F
+local MEM_CURRENT_MAP_ID = 0x084EE4
+local MEM_CURRENT_SUBMAP_ID = 0x084EE8
 
 local MEM_ENEMY_COUNT = 0x07C993
 local MEM_SIZE_ENEMY_BLOCK = 0x128
@@ -66,8 +66,8 @@ local function GetEnemyCount()
 end
 
 local function GetMapIDs()
-    local mapID = memory.readbyte(MEM_CURRENT_MAP_ID, "RDRAM")
-    local subMapID = memory.readbyte(MEM_CURRENT_SUBMAP_ID, "RDRAM")
+    local mapID = memory.read_u32_be(MEM_CURRENT_MAP_ID, "RDRAM")
+    local subMapID = memory.read_u32_be(MEM_CURRENT_SUBMAP_ID, "RDRAM")
 
     return mapID, subMapID
 end
@@ -506,9 +506,10 @@ while true do
 
     GuiText(13, "Agility:   " .. agility)
     GuiText(14, "Agi Dist:  " .. Round(combat_dist, 2))
+    GuiText(15, "    = XP:  " .. Round(combat_dist / 50, 2))
 
-    GuiText(16, "Map ID:  " .. map)
-    GuiText(17, "Sub Map: " .. submap)
+    GuiText(17, "Map ID:  " .. map)
+    GuiText(18, "Sub Map: " .. submap)
 
     -- GuiTextRight(5, "Unique Centers: " .. CountUniqueBattleCenters())
     -- GuiTextRight(6, "Battle Dist: " .. Round(center_dist, 2))

@@ -20,14 +20,16 @@ local function GetSpiritDurationRemaining(index)
     local status = memory.read_u16_be(state_address, "RDRAM")
 
     if status > 0 then
-        return true, -1
+        return true, -1, -1
     end
     
-    local countdown = memory.read_u16_be(state_address + 2, "RDRAM")
-    if countdown > 0xFF00 then
-        return false, 6 + 0xFFFF - countdown
+    local actual_countdown = memory.read_u16_be(state_address + 2, "RDRAM")
+    if actual_countdown > 0xFF00 then
+        local tick_timer = 6 + 0xFFFF - actual_countdown
+        return false, tick_timer, actual_countdown
     else
-        return false, 6 - countdown
+        local tick_timer = 6 - actual_countdown
+        return false, tick_timer, actual_countdown
     end
 end
 
@@ -50,6 +52,11 @@ local function GuiText(row_index, text)
     GuiTextWithColor(row_index, text, "white")
 end
 
+local duration_min = 9999
+local duration_max = 0
+
+local previous_values = {}
+
 while true do
 
     GuiText(18, "Spirit Timers:")
@@ -58,14 +65,34 @@ while true do
     local total_spirits = GetTotalSpiritsInArea()
     for k = 1, total_spirits do
 
-        local collected, duration = GetSpiritDurationRemaining(k)
+        local collected, duration, raw_value  = GetSpiritDurationRemaining(k)
 
-        local duration_str = "|" .. string.rep("=", duration) .. string.rep(" ", 100 - duration) .. "|"
+        if previous_values[k] ~= nil then
+            
+            local previous_value = previous_values[k]
+            local value_increased = previous_value < duration
+            if value_increased then
+                if duration < duration_min then
+                    duration_min = duration
+                end
+
+                if duration > duration_max then
+                    duration_max = duration
+                end
+            end
+        end
+
+        previous_values[k] = duration
+
+
+        local duration_str = string.format("%04X -> %02d", raw_value, duration) .. "|" .. string.rep("=", duration) .. string.rep(" ", 100 - duration) .. "|"
         local info_str = Ternary(collected, "Collected!", duration_str)
         local text = string.format("%d: " .. info_str, k)
         
         GuiText(19 + k, text)
     end
+    
+    GuiText(25, string.format("Observed Duration Range: %02d - %02d", duration_min, duration_max))
     
     emu.frameadvance()
 end

@@ -365,12 +365,12 @@ def plot_map(map_data: MapData):
         plt.plot(xs, zs, lw="1")
         # colored_line_between_pts(xs, zs, cs, ax, cmap="viridis")
         
-        for k in range(len(xs)-1):
-            x1 = xs[k]
-            z1 = zs[k]
-            x2 = xs[k+1]
-            z2 = zs[k+1]
-            ax.annotate("", (x1, z1), (x2, z2), arrowprops=dict(arrowstyle="->"))
+        # for k in range(len(xs)-1):
+        #     x1 = xs[k]
+        #     z1 = zs[k]
+        #     x2 = xs[k+1]
+        #     z2 = zs[k+1]
+        #     ax.annotate("", (x1, z1), (x2, z2), arrowprops=dict(arrowstyle="->"))
         
     # Regions 
     for region in map_data.regions:        
@@ -379,7 +379,7 @@ def plot_map(map_data: MapData):
         
     # Circles 
     for circle in map_data.circles:        
-        circle = patches.Circle((circle["x"], circle["z"]), radius=90, color="#AA000022", fill=False)
+        circle = patches.Circle((circle["x"], circle["z"]), radius=90, color="#AA000055", fill=False)
         ax.add_patch(circle)
         
     icon_chest = np.asarray(Image.open("icons/icon-chest.png"))
@@ -404,11 +404,63 @@ def plot_map(map_data: MapData):
     #     ax.add_artist(ab)
     
     fig = plt.gcf()
-    # fig.set_dpi(1000)
-    # fig.set_size_inches(base_height * size_ratio, base_height)
     fig.savefig("check.png")
     
     plt.show()
+
+
+def compare_all_maps(us_path, jp_path):
+    us_map_json_pattern = os.path.join(us_path, "*.json")
+    us_map_json_files = glob.glob(us_map_json_pattern)
+                             
+    jp_map_json_pattern = os.path.join(jp_path, "*.json")
+    jp_map_json_files = glob.glob(jp_map_json_pattern)
+    
+    us_files = set([path.replace("\\", "/").split("/")[-1] for path in us_map_json_files])
+    jp_files = set([path.replace("\\", "/").split("/")[-1] for path in jp_map_json_files])
+    
+    intersect = us_files.intersection(jp_files)
+    
+    for filename in intersect:
+        
+        us_data = MapData.load_from_path(f"{us_path}/{filename}")
+        jp_data = MapData.load_from_path(f"{jp_path}/{filename}")
+        
+        us_circle_count = len(us_data.circles)
+        jp_circle_count = len(jp_data.circles)
+        
+        if us_circle_count != jp_circle_count:
+            print(filename, f"US Circles: {us_circle_count}, JP Circles: {jp_circle_count}")     
+            
+            
+        us_region_count = len(us_data.regions)
+        jp_region_count = len(jp_data.regions)
+        
+        if us_region_count != jp_region_count:
+            print(filename, f"US Regions: {us_region_count}, JP Regions: {jp_region_count}")   
+            
+            
+        
+            
+        us_wall_count = len(us_data.walls)
+        jp_wall_count = len(jp_data.walls)
+        
+        if us_wall_count != jp_wall_count:
+            print(filename, f"US Walls: {us_wall_count}, JP Walls: {jp_wall_count}")       
+
+def compare_maps(map_1: MapData, map_2: MapData):
+    map_1_circles = map_1.circles
+    map_2_circles = map_2.circles
+
+    for c1, c2 in zip(map_1_circles, map_2_circles):
+        x1 = c1["x"]
+        z1 = c1["z"]
+        x2 = c2["x"]
+        z2 = c2["z"]
+        
+        d = distance(x1, z1, x2, z2)
+        if d >= 0.5:
+            print("Circle Diff:: ", map_1.path, map_2.path, "::", c1, c2)
 
 def get_map_ids_from_filename(filename):
     match = re.search(r'mapdata-(\d+)-(\d+)\.json$', filename)
@@ -454,6 +506,8 @@ def main():
     
     # geometry_path = sys.argv[1]
     # # find_oob_angles(geometry_path)
+    
+    # compare_all_maps("../lua/data/us", "../lua/data/jp")
 
     mapdata_path = sys.argv[1]
     mapdata = MapData.load_from_path(mapdata_path)

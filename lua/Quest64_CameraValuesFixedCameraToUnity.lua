@@ -141,6 +141,55 @@ local function DistanceBetweenCoords(c1, c2)
     return math.sqrt(dx * dx + dz * dz)
 end
 
+local function GetRuntimeCameraData()
+
+    local addr_base = 0X86DC0
+
+    return {
+        mode = memory.read_u32_be(addr_base + 0x0, "RDRAM"),
+        camera_x = memory.readfloat(addr_base + 0xC, true, "RDRAM"),
+        camera_y = memory.readfloat(addr_base + 0x10, true, "RDRAM"),
+        camera_z = memory.readfloat(addr_base + 0x14, true, "RDRAM"),
+        look_x = memory.readfloat(addr_base + 0x18, true, "RDRAM"),
+        look_y = memory.readfloat(addr_base + 0x1C, true, "RDRAM"),
+        look_z = memory.readfloat(addr_base + 0x20, true, "RDRAM"),
+        camera_angle_x = memory.readfloat(addr_base + 0x24, true, "RDRAM"),
+        camera_angle_y = memory.readfloat(addr_base + 0x28, true, "RDRAM"),
+        camera_angle_z = memory.readfloat(addr_base + 0x2C, true, "RDRAM"),
+        min_angle_x = memory.readfloat(addr_base + 0x60, true, "RDRAM"),
+        max_angle_x = memory.readfloat(addr_base + 0x64, true, "RDRAM"),
+        min_angle_y = memory.readfloat(addr_base + 0x68, true, "RDRAM"),
+        max_angle_y = memory.readfloat(addr_base + 0x6C, true, "RDRAM"),
+    }
+end
+
+
+
+
+
+
+
+local data = GetRuntimeCameraData()
+
+console.log("new QuestRuntimeCameraData")
+console.log("{")
+console.log("   mode = " .. data.mode .. ",")
+console.log("   camX = " .. data.camera_x .. "f,")
+console.log("   camY = " .. data.camera_y .. "f,")
+console.log("   camZ = " .. data.camera_z .. "f,")
+console.log("   targetBaseX = " .. data.look_x .. "f,")
+console.log("   targetBaseY = " .. data.look_y .. "f,")
+console.log("   targetBaseZ = " .. data.look_z .. "f,")
+console.log("   cameraAngleX = " .. data.camera_angle_x .. "f,")
+console.log("   cameraAngleY = " .. data.camera_angle_y .. "f,")
+console.log("   cameraAngleZ = " .. data.camera_angle_z .. "f,")
+console.log("   minAngleX = " .. data.min_angle_x .. "f,")
+console.log("   maxAngleX = " .. data.max_angle_x .. "f,")
+console.log("   minAngleY = " .. data.min_angle_y .. "f,")
+console.log("   maxAngleY = " .. data.max_angle_y .. "f,")
+console.log("}")
+
+
 while true do
 
     local camera_transform = GetCameraTransform()
@@ -194,44 +243,10 @@ while true do
     GuiTextRight(32, " - Near Clip: " .. Round(near_clip, 2))
     GuiTextRight(33, " - Far Clip: " .. Round(far_clip, 2))
 
-    -- local MEM_CAMERA_VERTICAL_OFFSET = 0x86E1C
-    -- local MEM_CAMERA_LOCAL_ELEVATION = 0x86E18
-    -- local MEM_CAMERA_FOCUS_DISTANCE = 0x86E0C
-    -- local MEM_CAMERA_FOV_DEGREES = 0x86EC8
-    -- local MEM_CAMERA_NEAR_CLIP_DISTANCE = 0x86ECC
-    -- local MEM_CAMERA_FAR_CLIP_DISTANCE = 0x86ED0
-    
-    local ptr_mystery = GetPointerFromAddress(0x84F1C)
-    local ptr_available_zones = GetPointerFromAddress(0x086EDC)
-    local camera_zone_count = memory.read_u32_be(0x86B88, "RDRAM")
-    local current_zone_index = memory.read_u32_be(0x086ED8, "RDRAM")
-    local triangle_cam_value = memory.read_u16_be(0x07BC58, "RDRAM")
-    local triangle_cam_mode = bit.band(bit.rshift(triangle_cam_value, 1), 0x7)
-
-    GuiText(4, string.format("Camera Zones: %08X", ptr_available_zones))
-    GuiText(5, string.format("Zone Count:   %d", camera_zone_count))
-    GuiText(6, string.format("Current Zone: %d", current_zone_index))
-    GuiText(7, string.format("Triangle Cam: %04X", triangle_cam_value))
-    GuiText(8, string.format("      ^ Mode: %d", triangle_cam_mode))
-    
-    -- From func_8001CACC: https://decomp.me/scratch/n4VQc
-    --
-    local combat_adjustment_offset = memory.read_u32_be(0x84EE4, "RDRAM")
-    local ptr_combat_adjustment_base = 0x4D0A0
-    local ptr_combat_adjustment = combat_adjustment_offset * 0xC + ptr_combat_adjustment_base
-
-    local adj_elevation = memory.readfloat(ptr_combat_adjustment + 0x0, true, "RDRAM")
-    local adj_distance = memory.readfloat(ptr_combat_adjustment + 0x4, true, "RDRAM")
-
-    GuiText(10, string.format("Combat Height Adj:   %d", adj_elevation))
-    GuiText(11, string.format("Combat Distance Adj: %d", adj_distance))
-    
-    -- Pointers related to the camera / actor stuff?  0x4CC98
-
-    -- GuiText(4, string.format("Camera Zones: %08X", ptr_available_zones))
 
     emu.frameadvance()
 end
+
 
 -- 42.7, 79.4
 --

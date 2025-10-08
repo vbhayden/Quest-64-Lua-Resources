@@ -119,7 +119,8 @@ while true do
 
             if distance_to_brian < 100 then
 
-                local is_tree = IsTree(model_info.model)
+                -- local is_tree = IsTree(model_info.model)
+                local is_tree = true
                 if is_tree then
                     gui.text(200, 200 + close_index * 15, string.format("%2d: %08X %04X:%04X, %3.1f", close_index, addr, model_info.model, model_info.anim, distance_to_brian))
                     

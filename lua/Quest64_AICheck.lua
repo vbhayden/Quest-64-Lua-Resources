@@ -134,7 +134,7 @@ end
 
 local function GetEnemySpellUsage()
 
-    local ptr_enemy_attributes = GetPointerFromAddress(MEM_ENEMY_ANIMATION_START + MEM_OFFSET_ATTRIBUTES, "RDRAM")
+    local ptr_enemy_attributes = GetPointerFromAddress(MEM_ENEMY_ANIMATION_START + MEM_OFFSET_ATTRIBUTES)
     local ptr_enemy_ai_start = GetPointerFromAddress(ptr_enemy_attributes + MEM_OFFSET_AI_START)
 
     local enemy_ai_length = memory.read_u16_be(ptr_enemy_attributes + MEM_OFFSET_AI_LENGTH, "RDRAM")
