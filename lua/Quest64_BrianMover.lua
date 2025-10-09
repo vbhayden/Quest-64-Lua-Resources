@@ -201,6 +201,33 @@ local function WriteCrumbCSV(path)
     file:close()
 end
 
+local input_to_speed = {}
+local function ReadInputToSpeed(analog, speed)
+
+    if input_to_speed[analog] == nil or (speed > input_to_speed[analog]) then 
+        input_to_speed[analog] = speed
+        console.log(analog .. " -> " .. speed)
+    end
+end
+
+
+local function WriteInputToSpeedCSV(path)
+    local file = io.open(path, "w+")
+    if file == nil then 
+        return console.log("Could not open file at path: " .. path)
+    end
+
+    file:write("Input,Speed\n")
+
+    for input_value, input_speed in pairs(input_to_speed) do
+        file:write(string.format("%d,%.5f\n", input_value, input_speed))
+    end
+
+    breadcrumbs = {}
+
+    file:close()
+end
+
 local last_bx = 0
 local last_bx = 0
 local min_crumb_distance = 5
@@ -329,11 +356,21 @@ local function ProcessKeyboardInput()
         end
     end
     
+    -- if keys["Enter"] == true and previous_keys["Enter"] ~= true then
+    --     if readingCrumbs then
+    --         local map, submap = GetMapIDs()
+    --         local filename = "data/crumbs-" .. map .. "-" .. submap .. "-" .. os.time()
+    --         WriteCrumbCSV(filename .. ".csv")
+    --     end
+
+    --     readingCrumbs = not readingCrumbs
+    -- end
+
     if keys["Enter"] == true and previous_keys["Enter"] ~= true then
         if readingCrumbs then
             local map, submap = GetMapIDs()
-            local filename = "data/crumbs-" .. map .. "-" .. submap .. "-" .. os.time()
-            WriteCrumbCSV(filename .. ".csv")
+            local filename = "data/input-to-speed"
+            WriteInputToSpeedCSV(filename .. ".csv")
         end
 
         readingCrumbs = not readingCrumbs
@@ -383,18 +420,6 @@ local function GetMovementDelta(x, z)
     return dx, dz
 end
 
-local function PrintCombatValues(index)
-
-    local start = 0x88188 - 20 * 16
-
-    for k = 0, 40 do
-        local iter_address = start + k * 16
-        local combat_value = memory.readfloat(iter_address, true, "RDRAM")
-
-        GuiTextRight(k + index, "Combat " .. string.format("%x", iter_address) .. ": " .. combat_value)
-    end
-end
-
 local function IsEncounterActive()
     return GetEnemyCount() > 0
 end
@@ -417,10 +442,6 @@ local function AddBattleCenter(x, z)
     end
 
     BattleCenters[#BattleCenters+1] = new_coord
-end
-
-local function CountUniqueBattleCenters()
-    return #BattleCenters
 end
 
 local BattleDistanceMin = 9999
@@ -511,21 +532,10 @@ while true do
     GuiText(17, "Map ID:  " .. map)
     GuiText(18, "Sub Map: " .. submap)
 
-    -- GuiTextRight(5, "Unique Centers: " .. CountUniqueBattleCenters())
-    -- GuiTextRight(6, "Battle Dist: " .. Round(center_dist, 2))
-    -- GuiTextRight(7, "Battle Dist (Min): " .. Round(BattleDistanceMin, 2))
-    -- GuiTextRight(8, "Battle Dist (Max): " .. Round(BattleDistanceMax, 2))
-        
-
-    -- GuiTextRight(9, "Battle Center X: " .. Round(cx, 5))
-    -- GuiTextRight(10, "Battle Center Z: " .. Round(cz, 5))
-    -- GuiTextRight(11, "Battle Delta X: " .. Round(bdx, 2))
-    -- GuiTextRight(12, "Battle Delta Z: " .. Round(bdz, 2))
-
-    -- PrintCombatValues(5)
-
+    
     if readingCrumbs then
-        ReadCrumbs()
+        -- ReadCrumbs()
+        ReadInputToSpeed(analog_y, speed)
     end
     wasReadingCrumbs = readingCrumbs
 
