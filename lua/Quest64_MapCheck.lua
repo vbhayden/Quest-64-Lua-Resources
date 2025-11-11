@@ -1,4 +1,5 @@
 local MEM_PTR_MAP_DATA_MAIN = 0x084F18
+local MEM_PTR_MAP_DATA_DOORS = 0x084F1C
 local MEM_PTR_MAP_DATA_MODELS = 0x084F20
 local MEM_LOADED_MODELS_ARRAY_PTR = 0x84F24
 local MEM_PTR_MAP_DATA_VEGETATION = 0x084F24
@@ -20,6 +21,117 @@ local MEM_CURRENT_SUBMAP_ID = 0x08536F
 
 local MEM_GAME_STATE = 0x07B2E4
 local MEM_ALLOW_BATTLES = 0x084F10
+
+local CHARMAP_80 = {
+    [0x00] = "0",
+    [0x01] = "1",
+    [0x02] = "2",
+    [0x03] = "3",
+    [0x04] = "4",
+    [0x05] = "5",
+    [0x06] = "6",
+    [0x07] = "7",
+    [0x08] = "8",
+    [0x09] = "9",
+    [0x0A] = "!",
+    [0x0B] = "?",
+    [0x0C] = "「",
+    [0x0D] = "」",
+    [0x0E] = "『",
+    [0x0F] = "』",
+    [0x10] = ".",
+    [0x11] = ",",
+    [0x12] = "…",
+    [0x13] = "‧",
+    [0x14] = ":",
+    [0x15] = "-",
+    [0x16] = "♪",
+    [0x17] = "♡",
+    [0x18] = "〜",
+    [0x19] = "。",
+    [0x1A] = "、",
+    [0x1B] = "ー",
+    [0x1C] = "々",
+    [0x1D] = "ヴ",
+    [0x1E] = " ",
+    [0x1F] = " ",
+}
+
+local CHARMAP_81 = {
+    [0x00] = "A",
+    [0x01] = "B",
+    [0x02] = "C",
+    [0x03] = "D",
+    [0x04] = "E",
+    [0x05] = "F",
+    [0x06] = "G",
+    [0x07] = "H",
+    [0x08] = "I",
+    [0x09] = "J",
+    [0x0A] = "K",
+    [0x0B] = "L",
+    [0x0C] = "M",
+    [0x0D] = "N",
+    [0x0E] = "O",
+    [0x0F] = "P",
+    [0x10] = "Q",
+    [0x11] = "R",
+    [0x12] = "S",
+    [0x13] = "T",
+    [0x14] = "U",
+    [0x15] = "V",
+    [0x16] = "W",
+    [0x17] = "X",
+    [0x18] = "Y",
+    [0x19] = "Z",
+    [0x1A] = "&",
+    [0x1B] = " ",
+    [0x1C] = " ",
+    [0x1D] = " ",
+    [0x1E] = " ",
+    [0x1F] = " ",
+}
+
+local CHARMAP_82 = {
+    [0x00] = "a",
+    [0x01] = "b",
+    [0x02] = "c",
+    [0x03] = "d",
+    [0x04] = "e",
+    [0x05] = "f",
+    [0x06] = "g",
+    [0x07] = "h",
+    [0x08] = "i",
+    [0x09] = "j",
+    [0x0A] = "k",
+    [0x0B] = "l",
+    [0x0C] = "m",
+    [0x0D] = "n",
+    [0x0E] = "o",
+    [0x0F] = "p",
+    [0x10] = "q",
+    [0x11] = "r",
+    [0x12] = "s",
+    [0x13] = "t",
+    [0x14] = "u",
+    [0x15] = "v",
+    [0x16] = "w",
+    [0x17] = "x",
+    [0x18] = "y",
+    [0x19] = "z",
+    [0x1A] = "'",
+    [0x1B] = "“",
+    [0x1C] = "”",
+    [0x1D] = " ",
+    [0x1E] = " ",
+    [0x1F] = " ",
+}
+
+local QUEST_CHARMAPS = {
+    [0x80] = CHARMAP_80,
+    [0x81] = CHARMAP_81,
+    [0x82] = CHARMAP_82,
+}
 
 local function Ternary ( cond , T , F )
     if cond then return T else return F end
@@ -208,10 +320,144 @@ local function ReadChestsFromMemory()
     return chests
 end
 
+local function ReadNPCsFromMemory()
+
+    local ptr_npcs_start = 0x7BD30
+    local npc_block_size = 0x84
+    local npc_count = memory.read_u32_be(0x7BCE4, "RDRAM")
+    local npcs = {}
+
+    local npc_index = 0
+
+    console.log("NPC Count: " .. npc_count)
+
+    while npc_index < npc_count do
+
+        local ptr_npc = ptr_npcs_start + npc_index * npc_block_size
+        local ptr_npc_data = GetPointerFromAddress(ptr_npc + 0x80)
+
+        -- console.log(string.format("NPC %d:: Data 1 %08X, Data 2 %08X", npc_index, ptr_npc, ptr_npc_data))
+
+        local ptr_name_start = GetPointerFromAddress(ptr_npc_data + 0x14)
+
+        -- console.log(string.format("Name Addr: %08X", ptr_name_start))
+
+        local name_chars = {}
+        local is_name = memory.read_u16_be(ptr_name_start, "RDRAM") == 0xA0C0
+
+        local charmap_active = CHARMAP_80
+
+        if is_name then
+            for k=2,32 do
+
+                local code = memory.readbyte(ptr_name_start + k, "RDRAM")
+                
+                -- console.log(string.format("RAW CODE:: %02X", code))
+                if code == 0xFF then
+                    break
+                end
+
+                if code >= 0x80 then
+                    charmap_active = QUEST_CHARMAPS[code]
+
+                    -- console.log(string.format("Switching Charmaps:: %02X", code))
+                elseif code < 0x20 then
+                    local char = charmap_active[code]
+
+                    -- console.log(string.format("Adding Char:: %02X -> %s", code, char))
+
+                    name_chars[#name_chars+1] = char
+                elseif code == 0x7F then
+                    name_chars[#name_chars+1] = " "
+                end
+            end
+        end
+
+        local name = table.concat(name_chars)
+        console.log(string.format("NPC Name @ %08X:: %s", ptr_name_start, table.concat(name_chars)))
+        
+        local npc = {
+            base_x = memory.readfloat(ptr_npc + 0x4, true, "RDRAM"),
+            base_z = memory.readfloat(ptr_npc + 0x8, true, "RDRAM"),
+            base_angle = memory.readfloat(ptr_npc + 0x18, true, "RDRAM"),
+
+            x = memory.readfloat(ptr_npc + 0x14, true, "RDRAM"),
+            y = memory.readfloat(ptr_npc + 0x18, true, "RDRAM"),
+            z = memory.readfloat(ptr_npc + 0x1C, true, "RDRAM"),
+
+            angle = memory.readfloat(ptr_npc + 0x24, true, "RDRAM"),
+            mode = memory.readbyte(ptr_npc_data + 0x4, "RDRAM"),
+            name = name
+        }
+
+        npcs[#npcs+1] = npc
+
+        npc_index = npc_index + 1
+    end
+
+    return npcs
+end
+
+local function ReadDoorsFromMemory()
+
+    local ptr_map_door_data = GetPointerFromAddress(MEM_PTR_MAP_DATA_DOORS)
+
+    local ptr_door_start = GetPointerFromAddress(ptr_map_door_data + 0x4)
+    local door_count = memory.read_u32_be(ptr_map_door_data + 0x8, "RDRAM")
+
+    local door_block_size = 0x24
+    local doors = {}
+
+    
+    console.log(string.format("Map Door Data: %08X", ptr_map_door_data))
+    console.log(string.format("Map Door Count: %08X", door_count))
+    console.log(string.format("Map First Door: %08X", ptr_door_start))
+
+    local door_index = 0
+    
+    -- console.log("Door Count: " .. door_count)
+
+    while door_index < door_count do
+
+        local door_addr = ptr_door_start + door_index * door_block_size
+        
+        console.log(string.format("Door %d: %08X", door_index, ptr_door_start + door_index * door_block_size))
+
+        local door = {
+            x = memory.readfloat(door_addr + 0x0, true, "RDRAM"),
+            z = memory.readfloat(door_addr + 0x4, true, "RDRAM"),
+            angle = memory.readfloat(door_addr + 0x8, true, "RDRAM"),
+            size_x = memory.readfloat(door_addr + 0xC, true, "RDRAM"),
+            size_z = memory.readfloat(door_addr + 0x10, true, "RDRAM"),
+            
+            flags_1 = memory.read_u32_be(door_addr + 0x14, "RDRAM"),
+            flags_2 = memory.read_u32_be(door_addr + 0x18, "RDRAM"),
+            flags_3 = memory.read_u16_be(door_addr + 0x1C, "RDRAM"),
+
+            to_map = memory.read_u16_be(door_addr + 0x1E, "RDRAM"),
+            to_submap = memory.read_u16_be(door_addr + 0x20, "RDRAM"),
+            to_door = memory.read_u16_be(door_addr + 0x22, "RDRAM"),
+        }
+
+        -- console.log(door)
+
+        doors[#doors+1] = door
+
+        door_index = door_index + 1
+    end
+
+    -- console.log("Door Count: " .. door_count)
+
+    return doors
+end
+
 local function ReadNavMesh()
 
     local map, submap = GetMapIDs()
     local ptr_nav_data = GetPointerFromAddress(MEM_PTR_MAP_DATA_NAVIGATION)
+
+    console.log(string.format("READING NAVMESH START"))
+    console.log(string.format(">> Map: %d, Submap %d", map, submap))
 
     -- Need the submap index to read everything
     local ptr_submap_nav_data = ptr_nav_data + 0x10 * submap
@@ -424,6 +670,8 @@ end
 
 local function GetModelFaces(x, z, scale, flags, arg4_address, arg5)
 
+    -- console.log(string.format("Preparing to read near: %08X", arg4_address))
+
     local arg4 = {
         unk0 = memory.read_u16_be(arg4_address + 0x0, "RDRAM"),
         unk2 = memory.read_u16_be(arg4_address + 0x2, "RDRAM"),
@@ -446,11 +694,10 @@ local function GetModelFaces(x, z, scale, flags, arg4_address, arg5)
 
     -- console.log(string.format("Triangle Data at %08X:: %04d faces", arg4_address, triangle_count))
 
-    if triangle_count ~= 0 then
-        
+    if triangle_count > 0 and triangle_count < 0x500 then
         for triangle_index = 0,triangle_count - 1 do
 
-            if arg4.unk14 ~= 0 then
+            if arg4.unk14 > 0 then
 
                 local var_s1 = GetFaceData(arg4.unk14 + face_data_length * triangle_index)
                 
@@ -470,15 +717,27 @@ local function GetModelFaces(x, z, scale, flags, arg4_address, arg5)
             end
             
         end
+    elseif triangle_count > 0 then
+        console.log(string.format("IGNORE: %08X w/ %d Triangles", arg4_address, triangle_count))
     end
 
     return faces
 end
 
+-- https://decomp.me/scratch/63Yp0
+--
 local function GetModelInfo(arg0, arg1, flags, model_index, motion_data)
 
     local block_length = 0x18
     local ptr_model_info = GetPointerFromAddress(0x84F24) + block_length * model_index
+
+    -- console.log(string.format("Model Info Addr: %08X", ptr_model_info))
+
+    -- if ptr_model_info > 8388608 then
+    --     console.log(string.format("BAD MODEL INDEX + PTR:: %d giving %08X", model_index, ptr_model_info))
+    -- else
+    --     console.log(string.format("Safe:: %d giving %08X", model_index, ptr_model_info))
+    -- end
 
     local var_a0 = {
         unk0 = memory.readfloat(ptr_model_info + 0x0, true, "RDRAM"),   -- X
@@ -498,14 +757,25 @@ local function GetModelInfo(arg0, arg1, flags, model_index, motion_data)
     local local_z = arg1 - var_a0.unk8
     local model_scale = var_a0.unk10
 
+    if var_a0.unk14 > 0x100 then
+        return {
+            faces = {},
+            scale = var_a0.unk10,
+            angle = var_a0.unkC,
+            x = model_x,
+            y = model_y,
+            z = model_z
+        }
+    end
+
     local var_v0 = bit.lshift(var_a0.unk14, 5) + GetPointerFromAddress(0x84F28)
     
-    -- console.log(string.format("var_v0: %08X", var_v0))
+    -- console.log(string.format("%08X << 5 -> var_v0: %08X", var_a0.unk14, var_v0))
 
     local terrain_has_collision = bit.band(var_a0.unk16, 0xFF) < 0x10
     local faces = GetModelFaces(local_x, local_z, model_scale, flags, var_v0, motion_data)
 
-    -- console.log(model_index .. ": " .. #triangles)
+    -- console.log(model_index .. ": " .. #faces)
 
     return {
         faces = faces,
@@ -530,10 +800,6 @@ local function ReadElevationData()
     local temp_v0 = GetMapModelData()
     local brian = GetBrianLocation()
 
-    local v1 = 0
-    local a1 = 0
-    local var_s1 = 0
-
     local model_count = 0
     local elevation_models = {}
 
@@ -546,10 +812,14 @@ local function ReadElevationData()
         local var_s1_2 = var_s1 + 2
 
         -- console.log(string.format("var_s1: %08X", var_s1))
-        -- console.log(string.format("models: %d", var_s0))
+        console.log(string.format("Model Count: %d", var_s0))
 
-        while var_s0 ~= 0 do
-            
+        -- console.clear()
+
+        while var_s0 > 0 do
+
+            -- console.log(string.format("remaining models: %d", var_s0))
+
             local temp_a3 = memory.read_u16_be(var_s1_2, "RDRAM")
             var_s1_2 = var_s1_2 + 2
             var_s0 = var_s0 - 1
@@ -644,6 +914,7 @@ local function WriteMapData(path)
         return console.log("Could not open file at path: " .. path)
     end
     
+    console.clear()
     local geometry_chains = ReadNavMesh()
     local circles = GetEncounterCirclesFromMemory()
     local regions = GetEncounterRegionsFromMemory()
@@ -652,12 +923,19 @@ local function WriteMapData(path)
     local vegetation = GetMapVegetationData()
     local elevation_triangles = ReadElevationData()
     local camera_configs = GetMapCameraConfigs()
+    local npcs = ReadNPCsFromMemory()
+    local doors = ReadDoorsFromMemory()
+    
+    local map, submap = GetMapIDs()
 
     file:write("{\n")
 
     local last_char = ""
 
+    console.log(string.format("WRITING MAP DATA FOR %d - %d", map, submap))
 
+    file:write(string.format('\t"map": %d,\n', map))
+    file:write(string.format('\t"submap": %d,\n', submap))
     file:write('\t"cameraConfig": {\n')
     file:write('\t\t"zones": [\n')
     local zones = camera_configs.zones
@@ -737,7 +1015,26 @@ local function WriteMapData(path)
         file:write(string.format('\t\t{"x": %.4f, "y": %.4f, "z": %.4f, "angle": %.4f}%s\n', chest.x, chest.y, chest.z, chest.angle, last_char))
     end    
     file:write('\t],\n')
+
     
+    file:write('\t"npcs": [\n')
+    for npc_index, npc in pairs(npcs) do
+        local last_char = ","
+        if npc_index == #npcs then last_char = "" else last_char = "," end
+        file:write(string.format('\t\t{"base_x": %.4f, "base_z": %.4f, "base_angle": %.4f, "x": %.4f, "y": %.4f, "z": %.4f, "angle": %.4f, "mode": %d, "name": "%s"}%s\n', npc.base_x, npc.base_z, npc.base_angle, npc.x, npc.y, npc.z, npc.angle, npc.mode, npc.name, last_char))
+    end    
+    file:write('\t],\n')
+    
+    
+
+    file:write('\t"doors": [\n')
+    for door_index, door in pairs(doors) do
+        local last_char = ","
+        if door_index == #doors then last_char = "" else last_char = "," end
+        file:write(string.format('\t\t{"x": %.4f, "z": %.4f, "angle": %.4f, "size_x": %.4f, "size_z": %.4f, "flags_1": %d, "flags_2": %d, "flags_3": %d, "to_map": %d, "to_submap": %d, "to_door":%d }%s\n', door.x, door.z, door.angle, door.size_x, door.size_z, door.flags_1, door.flags_2, door.flags_3, door.to_map, door.to_submap, door.to_door, last_char))
+    end    
+    file:write('\t],\n')
+
 
     file:write('\t"vegetation": [\n')
     for v_index, model in pairs(vegetation) do
@@ -794,18 +1091,29 @@ local function WriteMapData(path)
     file:close()
 end
 
+console.log("Map Check Running ...")
+
 local busy_timeout = 60
 local busy_duration = 0
 local previous_map, previous_submap = -1, -1
+
+local logged_map, logged_submap = -1, -1
+
 while true do
     local map, submap = GetMapIDs()
     
+    local switched_recently = (logged_map ~= map) or (logged_submap ~= submap)
+    if switched_recently then
+        busy_duration = busy_timeout
+    end
+
     local busy = IsGameBusy()
     if busy then
         busy_duration = busy_timeout
     elseif busy_duration > 0 then
         busy_duration = busy_duration - 1
     end
+
 
     if (busy_duration == 0) and (previous_map ~= map or previous_submap ~= submap) then
 
@@ -817,6 +1125,9 @@ while true do
         previous_map = map
         previous_submap = submap
     end
+
+    logged_map = map
+    logged_submap = submap
 
     was_busy = busy
     emu.frameadvance()

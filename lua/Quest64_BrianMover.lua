@@ -87,9 +87,10 @@ local function GetBrianLocation()
     return { x=x, y=y, z=z }
 end
 
-local function SetBrianLocation(x, z)
+local function SetBrianLocation(x, y, z)
     
     memory.writefloat(MEM_BRIAN_POSITION_X, x, true, "RDRAM")
+    memory.writefloat(MEM_BRIAN_POSITION_Y, y, true, "RDRAM")
     memory.writefloat(MEM_BRIAN_POSITION_Z, z, true, "RDRAM")
 end
 
@@ -170,7 +171,7 @@ local function MoveBrianRelative(x, y, z)
     local dx, dy, dz = TransformDirectionForBrian(x, y, z)
     local coord = GetBrianLocation()
 
-    SetBrianLocation(coord.x + dx * MovementMagnitude, coord.z + dz * MovementMagnitude)
+    SetBrianLocation(coord.x + dx * MovementMagnitude, coord.y + dy * MovementMagnitude, coord.z + dz * MovementMagnitude)
 end
 
 local function MoveEnemyRelative(x, y, z)
@@ -296,20 +297,32 @@ local function ProcessKeyboardInput()
         ToggleAnalog()
     end
 
+    
     if keys["Up"] == true and previous_keys["Up"] ~= true then
-        if use_analog then
-            UpdateAnalog(0, analog_increment)
+
+        if keys["Shift+Up"] == true then
+            movementFunc(0, 1, 0)
         else
-            movementFunc(0, 0, 1)
+            if use_analog then
+                UpdateAnalog(0, analog_increment)
+            else
+                movementFunc(0, 0, 1)
+            end
         end
     end
 
     if keys["Down"] == true and previous_keys["Down"] ~= true then
-        if use_analog then
-            UpdateAnalog(0, analog_decrement)
+        
+        if keys["Shift+Down"] == true then
+            movementFunc(0, -1, 0)
         else
-            movementFunc(0, 0, -1)
+            if use_analog then
+                UpdateAnalog(0, analog_decrement)
+            else
+                movementFunc(0, 0, -1)
+            end
         end
+
     end
 
     if keys["Left"] == true and previous_keys["Left"] ~= true then
