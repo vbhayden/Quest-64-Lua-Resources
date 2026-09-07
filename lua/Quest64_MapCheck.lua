@@ -211,8 +211,9 @@ local function GetEncounterRegionsFromMemory()
     local regions = {}
 
     local data = GetEncounterPointers()
+    local first_hex_block = memory.read_u32_be(data.ptr_region_start, "RDRAM")
 
-    -- console.log(string.format("%08X -> %s Total Regions", data.ptr_region_start, data.total_regions))
+    console.log(string.format("%08X -> %s Total Regions, start: %08X", data.ptr_region_start, data.total_regions, first_hex_block))
     -- return {}
 
     local region_size = 4 * 6
@@ -335,12 +336,7 @@ local function ReadNPCsFromMemory()
 
         local ptr_npc = ptr_npcs_start + npc_index * npc_block_size
         local ptr_npc_data = GetPointerFromAddress(ptr_npc + 0x80)
-
-        -- console.log(string.format("NPC %d:: Data 1 %08X, Data 2 %08X", npc_index, ptr_npc, ptr_npc_data))
-
         local ptr_name_start = GetPointerFromAddress(ptr_npc_data + 0x14)
-
-        -- console.log(string.format("Name Addr: %08X", ptr_name_start))
 
         local name_chars = {}
         local is_name = memory.read_u16_be(ptr_name_start, "RDRAM") == 0xA0C0
@@ -558,6 +554,8 @@ local function GetMapVegetationData()
             
             local addr = ptr_models_array + k * 24
             local model_info = GetModelInfoAtAddress(addr)
+
+            -- console.log(string.format("Veg Model: %08X, Anim: %08X, Addr: %08X", model_info.model, model_info.anim, addr))
 
             local is_tree = IsTree(model_info.model)
             local is_shrub = IsShrub(model_info.model)

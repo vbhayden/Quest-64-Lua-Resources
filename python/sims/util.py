@@ -77,9 +77,6 @@ def test():
             
     print("Total Failures:", failures)
 
-@njit()
-def cylindrical_distance
-
 def main():
     pass
 
