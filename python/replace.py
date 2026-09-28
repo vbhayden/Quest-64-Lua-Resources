@@ -1,4 +1,5 @@
 from pathlib import Path
+from crc.crc import fix_crc
 
 ROM_PATH = "./roms/quest.clean.boss.anim.z64"
 OUTPUT_PATH = "./quest.boss.anims.z64"
@@ -15,15 +16,16 @@ PATCHES = {
     0x43619C: 0x00000002, 
     0x4361A0: 0x00000000, 
     
-    # Fixing spell anim update to use caster from projectiles
-    0xBF88: 0x3C028008,
-    0xBF8C: 0x8C426F3C,
+    # func_8000A284, trigger special boss animations anywhere
+    0xAFBC: 0x312A0101,
     
-    # Fixing queue flag to queue animations for any encounter in func_8000A284
-    0xAFBC: 0x308A0400,
-    
-    # Fixing queue flag to update animations for any encounter in func_80008C20
+    # func_80008C20: update special boss animations anywhere
     0x98C0: 0x318D0101,
+    
+    # # Fixing spell anim update to use caster from projectiles
+    # 0xBF88: 0x3C028008,
+    # 0xBF8C: 0x8C426F3C,
+    
     
     # Adding Nepty Spin to Were Hare
     0xADBEE0: 0x84050003,
@@ -44,5 +46,8 @@ for offset, instruction in PATCHES.items():
 
 with open(OUTPUT_PATH, "wb") as f:
     f.write(rom)
+    
+fix_crc(OUTPUT_PATH)
+fix_crc(OUTPUT_PATH)
 
 print(f"Saved patched ROM to {OUTPUT_PATH}")
