@@ -215,10 +215,10 @@ def simulate_projectile_with_constellation(fps: int):
     
     ## Init
     ##
-    local_direction = (-0.7, 0.5,  0.7)
-    world_direction = rotate_vector_with_angle(3.1416, local_direction)
+    local_direction = (-0.7, 0.0,  0.7)
+    world_direction = rotate_vector_with_angle(math.pi, local_direction)
     
-    brian = Brian(0, 60, 0, 3.1416)
+    brian = Brian(0, 60, 0, math.pi)
     enemy = Enemy(0, 60, -90, 74.0, 17.5, 28.0)
     p = Projectile(0, 0, 0, 0, 0, 0)
     
