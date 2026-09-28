@@ -193,7 +193,9 @@ operation_to_bin = {
     "beqzl": 0b000100,
     "beqz":  0b000100,
     "beql":  0b010100,
-    "sll":   0b000000
+    "sll":   0b000000,
+    "slt":   0b101010,
+    "mfc1":  0b010001,
 }
 
 FLOAT_REGISTERS = {
@@ -305,16 +307,7 @@ def assemble_cop_arithmetic_hex_instruction(operation: str, r1: str, r2: str, r3
     return f"{int(coprocessor + func_format + r2_code + r1_code + r3_code + func_code, 2):08X}"
 
 
-def assemble_special_hex_instruction(operation: str, r1: str, r2: str, r3: str):
-    
-    lead_zeros = "000000"
-    r1_code = f"{get_register_bin(r1):05b}"
-    r2_code = f"{get_register_bin(r2):05b}"
-    r3_code = f"{get_register_bin(r3):05b}"
-    trail_zeroes = "00000"
-    op_code = f"{operation_to_bin[operation]:06b}"
-    
-    return f"{int(lead_zeros + r2_code + r3_code + r1_code + trail_zeroes + op_code, 2):08X}"
+# Order: 2-3-1, rear zeroes
 
 def assemble_special_hex_instruction(operation: str, r1: str, r2: str, r3: str):
     
@@ -327,9 +320,25 @@ def assemble_special_hex_instruction(operation: str, r1: str, r2: str, r3: str):
     
     return f"{int(lead_zeros + r2_code + r3_code + r1_code + trail_zeroes + op_code, 2):08X}"
 
+# Order: 2-1-3, rear zeroes
+
+def assemble_sll_hex_instruction(operation: str, r1: str, r2: str, sa: int):
+    
+    lead_zeros = "000000"
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    sa_code = f"{sa:05b}"
+    trail_zeroes = "00000"
+    op_code = f"{operation_to_bin[operation]:06b}"
+
+    binary = lead_zeros + trail_zeroes + r2_code + r1_code + sa_code + op_code
+    
+    return f"{int(binary, 2):08X}"
 
 
-def assemble_left_shift_hex_instruction(operation: str, r1: str, r2: str, r3: str):
+# Order: 2-3-1, rear zeroes
+
+def assemble_slt_hex_instruction(operation: str, r1: str, r2: str, r3: str):
     
     lead_zeros = "000000"
     r1_code = f"{get_register_bin(r1):05b}"
@@ -337,9 +346,45 @@ def assemble_left_shift_hex_instruction(operation: str, r1: str, r2: str, r3: st
     r3_code = f"{get_register_bin(r3):05b}"
     trail_zeroes = "00000"
     op_code = f"{operation_to_bin[operation]:06b}"
-    
-    return f"{int(lead_zeros + r2_code + r3_code + r1_code + trail_zeroes + op_code, 2):08X}"
 
+    binary = lead_zeros + trail_zeroes + r2_code + r3_code + r1_code + op_code
+    
+    return f"{int(binary, 2):08X}"
+
+
+# Order: 2-3-1, rear zeroes
+
+def assemble_slt_hex_instruction(operation: str, r1: str, r2: str, r3: str):
+    
+    lead_zeros = "000000"
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    r3_code = f"{get_register_bin(r3):05b}"
+    trail_zeroes = "00000"
+    op_code = f"{operation_to_bin[operation]:06b}"
+
+    binary = lead_zeros + trail_zeroes + r2_code + r3_code + r1_code + op_code
+    
+    return f"{int(binary, 2):08X}"
+
+
+# Order: 2-3-1, rear zeroes
+
+def assemble_mfc1_hex_instruction(operation: str, r1: str, r2: str):
+    
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    trail_zeroes = "00000"
+    immediate_zeroes = "00000000000"
+    op_code = f"{operation_to_bin[operation]:06b}"
+    
+    #              r1    r2
+    # mfc1         $a2,  $f2
+    # 010001 00000 00110 00010 00000000000
+
+    binary = op_code + trail_zeroes + r1_code + r2_code + immediate_zeroes
+    
+    return f"{int(binary, 2):08X}"
 
 
 
@@ -617,21 +662,74 @@ def process_sll(offset, operation, tokens) -> str:
     results = re.findall(token_pattern, tokens, re.VERBOSE)
     
     [r1, r2, shift_str] = results
-    shift_amount = f"{int(shift_str, 16):04X}"
+    shift_amount = int(shift_str, 16)
 
-    full = assemble_special_hex_instruction(operation, r1, r2, shift_amount)
+    full = assemble_sll_hex_instruction(operation, r1, r2, shift_amount)
+    return full
+
+
+def process_slt(offset, operation, tokens) -> str:
+     
+    token_pattern = r"""
+        0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
+        |
+        \d+              # decimal number, e.g. 0 or 12
+        |
+        [A-Za-z_]\w*     # identifier, e.g. t6 or v0
+    """
+    results = re.findall(token_pattern, tokens, re.VERBOSE)
+    
+    [r1, r2, r3] = results
+
+    full = assemble_slt_hex_instruction(operation, r1, r2, r3)
+    return full
+
+
+def process_li(offset, operation, tokens) -> str:
+     
+    token_pattern = r"""
+        0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
+        |
+        \d+              # decimal number, e.g. 0 or 12
+        |
+        [A-Za-z_]\w*     # identifier, e.g. t6 or v0
+    """
+    results = re.findall(token_pattern, tokens, re.VERBOSE)
+    
+    [r1, r2] = results
+
+    return process_addiu(offset, "addiu", f"{r1},zero,{r2}")
+
+
+def process_mfc1(offset, operation, tokens) -> str:
+
+    # mfc1         $a2,  $f2
+    # 010001 00000 00110 00010 00000000000
+
+    token_pattern = r"""
+        0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
+        |
+        \d+              # decimal number, e.g. 0 or 12
+        |
+        [A-Za-z_]\w*     # identifier, e.g. t6 or v0
+    """
+    results = re.findall(token_pattern, tokens, re.VERBOSE)
+    
+    [r1, r2] = results
+    
+    full = assemble_mfc1_hex_instruction(operation, r1, r2)
     return full
 
 
 def process_break_if_equals_zero(offset, operation, tokens) -> str:
      
-    [r1, r2] = tokens.split(",")
+    [r1, jump] = tokens.split(",")
     
-    if " " in r2:
-        r2 = r2.split(" ")[0]
+    if " " in jump:
+        jump = jump.split(" ")[0]
     
     call_offset = offset
-    jump_offset = int(r2, 16)
+    jump_offset = int(jump, 16)
     op_delta = (jump_offset - call_offset) // 4
     
     op_code = f"{operation_to_bin[operation]:06b}"
@@ -640,6 +738,11 @@ def process_break_if_equals_zero(offset, operation, tokens) -> str:
     delta_code = f"{int(op_delta):016b}"
 
     return f"{int(op_code + r1_code + zero_code + delta_code, 2):08X}"
+
+
+
+def process_break(offset, operation, tokens) -> str:
+     return process_break_if_equals_zero(offset, "beqz", f"zero,{tokens}")
 
 
 def interpret_as_hex(offset, operation, tokens) -> str:
@@ -683,11 +786,25 @@ def interpret_as_hex(offset, operation, tokens) -> str:
     elif operation in ["sll"]:
         return process_sll(offset, operation, tokens)
     
+    elif operation in ["slt"]:
+        return process_slt(offset, operation, tokens)
+    
+    elif operation in ["li"]:
+        return process_li(offset, operation, tokens)
+    
+    elif operation in ["mfc1"]:
+        return process_mfc1(offset, operation, tokens)
+    
+    elif operation in ["b"]:
+        return process_break(offset, operation, tokens)
+    
     return ""
 
 line_count = 0
 match_count = 0
 missing_ops = []
+
+hex_blocks = []
 
 for line in block.split("\n"):
 
@@ -710,6 +827,7 @@ for line in block.split("\n"):
     # print(operation, tokens, hex_block)
     
     line_count += 1
+    hex_blocks.append(hex)
     
     if hex != "":
         match_count += 1
@@ -717,5 +835,4 @@ for line in block.split("\n"):
         missing_ops.append(operation)
     
 print(f"{match_count} of {line_count} matched, {round(100 * match_count / line_count, 1)} %")
-
 print(f"Missing ops: {missing_ops}")
