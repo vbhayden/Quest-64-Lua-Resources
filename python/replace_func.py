@@ -1,164 +1,3 @@
-block = """
-i 288:    addiu   sp,sp,-0x78
-28c:    sw      ra,0x34(sp)
-290:    sw      s1,0x30(sp)
-294:    sw      s0,0x2c(sp)
-r 298:    lui     a0,%hi(D_8007D0C4)
-r 29c:    lw      a0,%lo(D_8007D0C4)(a0)
-r 2a0:    lui     v0,%hi(D_8007D0C0)
-> 2a4:    addiu   v0,v0,%lo(D_8007D0C0)
-r 2a8:    beqzl   a0,494 ~>
-2ac:    lw      ra,0x34(sp)
-r 2b0:    lhu     t6,0(v0)
-r 2b4:    lui     a2,%hi(D_8007BACC)
-| 2b8:    addiu   a2,a2,%lo(D_8007BACC)
-r 2bc:    addiu   t7,t6,1
-r 2c0:    sh      t7,0(v0)
-r 2c4:    lhu     t8,0(a0)
-r 2c8:    andi    t9,t7,0xffff
-r 2cc:    move    s1,a0
-r 2d0:    slt     at,t8,t9
-2d4:    beqz    at,490 ~>
-| 2d8:    lui     t4,%hi(D_80054690)
-r 2dc:    lhu     t2,2(a0)
-r 2e0:    lui     t8,%hi(D_8008C598)
-> 2e4:    lhu     t8,%lo(D_8008C598)(t8)
-r 2e8:    addiu   t4,t4,%lo(D_80054690)
-r 2ec:    sll     t3,t2,0x4
-r 2f0:    addu    t0,t3,t4
-r 2f4:    lh      t5,0(t0)
-r 2f8:    lui     t2,%hi(D_8007D0B0)
-> 2fc:    sll     t9,t8,0x1
-> 300:    addu    t2,t2,t9
-> 304:    lhu     t2,%lo(D_8007D0B0)(t2)
-> 308:    sll     t6,t5,0x2
-> 30c:    lui     t7,%hi(D_800C1B90)
-> 310:    addu    t6,t6,t5
-> 314:    sll     t6,t6,0x1
-318:    addiu   t7,t7,%lo(D_800C1B90)
-r 31c:    sll     t3,t2,0x3
-r 320:    addu    t1,t6,t7
-> 324:    addu    t3,t3,t2
-r 328:    sll     t3,t3,0x2
-> 32c:    lui     t6,%hi(D_8008C592)
-> 330:    lhu     t6,%lo(D_8008C592)(t6)
-r 334:    addu    t3,t3,t2
-> 338:    sll     t3,t3,0x3
-> 33c:    lui     t5,%hi(D_8007C998)
-> 340:    addiu   t5,t5,%lo(D_8007C998)
-> 344:    addiu   t4,t3,0x24
-> 348:    addu    a1,t4,t5
-> 34c:    andi    t7,t6,0x2
-> 350:    move    v1,a1
-> 354:    beqz    t7,364 ~>
-> 358:    move    v0,a2
-> 35c:    move    v0,a1
-| 360:    move    v1,a2
-364: ~> lwc1    ft0,8(s1)
-r 368:    lui     s0,%hi(D_8007D0D0)
-| 36c:    addiu   s0,s0,%lo(D_8007D0D0)
-370:    swc1    ft0,0(s0)
-374:    lwc1    ft1,0x10(s1)
-378:    move    a1,s0
-37c:    swc1    ft1,4(s0)
-r 380:    lwc1    fa0,0x10(v0)
-| 384:    sw      t1,0x48(sp)
-r 388:    sw      t0,0x4c(sp)
-r 38c:    sw      v1,0x54(sp)
-> 390:    sw      v0,0x58(sp)
-394:    jal     func_800232F4
-| 398:    swc1    fa0,0x38(sp)
-39c:    lhu     t8,4(s1)
-s 3a0:    lw      v0,0x58(sp)
-s 3a4:    lw      v1,0x54(sp)
-3a8:    andi    t9,t8,0x2
-> 3ac:    lw      t0,0x4c(sp)
-3b0:    beqz    t9,3c8 ~>
-| 3b4:    lw      t1,0x48(sp)
-r 3b8:    lwc1    fv1,0(v1)
-< 
-r 3bc:    lwc1    fa0,4(v1)
-< 
-3c0:    b       3d4 ~>
-r 3c4:    lwc1    fa1,8(v1)
-3c8: ~> lwc1    fv1,0(v0)
-3cc:    lwc1    fa0,4(v0)
-3d0:    lwc1    fa1,8(v0)
-r 3d4: ~> lwc1    ft5,0x24(v0)
-3d8:    lwc1    ft4,0(s0)
-r 3dc:    lwc1    ft3,0xc(s1)
-3e0:    lwc1    ft2,4(s0)
-r 3e4:    mul.s   ft4,ft4,ft5
-r 3e8:    lwc1    ft1,8(t0)
-r 3ec:    lui     at,%hi(D_8007D0D0)
-r 3f0:    mul.s   ft3,ft3,ft5
-r 3f4:    swc1    ft1,%lo(D_8007D0D0)(at)
-| 3f8:    lwc1    ft1,0xc(t0)
-r 3fc:    mul.s   ft5,ft2,ft5
-| 400:    lui     at,%hi(D_8007D0D0)
-< 
-r 404:    add.s   fv1,fv1,ft4
-r 408:    swc1    ft1,%lo(D_8007D0D0+0x4)(at)
-| 40c:    lwc1    ft1,0x28(v0)
-r 410:    add.s   fa0,fa0,ft3
-| 414:    lwc1    ft3,0x38(sp)
-| 418:    mfc1    a2,fv1
-| 41c:    add.s   fa1,fa1,ft5
-| 420:    mfc1    a3,fa0
-| 424:    lui     at,%hi(D_8007D0D0)
-< 
-< 
-< 
-< 
-< 
-< 
-< 
-< 
-< 
-< 
-< 
-r 428:    swc1    ft1,%lo(D_8007D0D0+0x8)(at)
-< 
-< 
-r 42c:    lhu     a0,2(t0)
-r 430:    lhu     a1,4(t0)
-434:    swc1    fa1,0x10(sp)
-| 438:    swc1    ft3,0x14(sp)
-< 
-< 
-< 
-< 
-< 
-r 43c:    sw      t1,0x18(sp)
-440:    sw      s0,0x1c(sp)
-< 
-444:    jal     func_800177F8
-r 448:    sw      v0,0x20(sp)
-44c:    lhu     v0,4(s1)
-r 450:    andi    t2,v0,0x4
-r 454:    beqzl   t2,46c ~>
-r 458:    andi    t3,v0,0x1
-45c:    jal     func_80013F20
-460:    li      a0,1
-464:    lhu     v0,4(s1)
-r 468:    andi    t3,v0,0x1
-r 46c: ~> beqz    t3,480 ~>
-r 470:    lui     v0,%hi(D_8007D0C4)
-474:    lui     at,%hi(D_8007D0C4)
-478:    b       490 ~>
-47c:    sw      zero,%lo(D_8007D0C4)(at)
-> 480: ~> addiu   v0,v0,%lo(D_8007D0C4)
-r 484:    lw      t4,0(v0)
-< 
-r 488:    addiu   t5,t4,0x18
-r 48c:    sw      t5,0(v0)
-490: ~> lw      ra,0x34(sp)
-494: ~> lw      s0,0x2c(sp)
-498:    lw      s1,0x30(sp)
-49c:    jr      ra
-i 4a0:    addiu   sp,sp,0x78
-"""
-
 import re
 
 special_tokens_to_bin = {
@@ -195,6 +34,8 @@ operation_to_bin = {
     "beql":  0b010100,
     "sll":   0b000000,
     "slt":   0b101010,
+    "subu":  0b100011,
+
     "mfc1":  0b010001,
 }
 
@@ -240,7 +81,13 @@ def get_register_bin(register: str) -> int:
         return 0b10000 + int(register[1:])
     
     if register.startswith("t"):
-        return 0b01000 + int(register[1:])
+        t_index = int(register[1:])
+        if t_index == 8:
+            return 0b11000
+        elif t_index == 9:
+            return 0b11001
+        else:
+            return 0b1000 + t_index
     
     if register.startswith("f"):
         return FLOAT_REGISTERS[register]
@@ -267,9 +114,23 @@ def get_hi_from(mem_addr: str) -> int:
         base = int(base_str[2:], 16)
         extra = int(extra_str, 16)
 
-        return f"{base + extra:X}"[:4]
+        addr = base + extra
+        upper = addr & 0xFFFF0000 >> 16
+        lower = addr & 0x0000FFFF
+
+        if lower >= 0x8000:
+            upper += 1
+
+        return f"{upper:04X}"
     
-    return mem_addr[2:6]
+    addr = int(mem_addr[2:], 16)
+    upper = (addr & 0xFFFF0000) >> 16
+    lower = addr & 0x0000FFFF
+
+    if lower >= 0x8000:
+        upper += 1
+
+    return f"{upper:04X}"
 
 def assemble_hex_instruction(operation: str, r1: str, r2: str, immediate: int):
     
@@ -338,6 +199,22 @@ def assemble_sll_hex_instruction(operation: str, r1: str, r2: str, sa: int):
 
 # Order: 2-3-1, rear zeroes
 
+def assemble_subu_hex_instruction(operation: str, r1: str, r2: str, r3_immediate: int):
+    
+    lead_zeros = "000000"
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    r3_code = f"{r3_immediate:05b}"
+    trail_zeroes = "00000"
+    op_code = f"{operation_to_bin[operation]:06b}"
+
+    binary = lead_zeros + trail_zeroes + r2_code + r3_code + r1_code + op_code
+    
+    return f"{int(binary, 2):08X}"
+
+
+# Order: 2-3-1, rear zeroes
+
 def assemble_slt_hex_instruction(operation: str, r1: str, r2: str, r3: str):
     
     lead_zeros = "000000"
@@ -374,18 +251,37 @@ def assemble_mfc1_hex_instruction(operation: str, r1: str, r2: str):
     
     r1_code = f"{get_register_bin(r1):05b}"
     r2_code = f"{get_register_bin(r2):05b}"
-    trail_zeroes = "00000"
     immediate_zeroes = "00000000000"
-    op_code = f"{operation_to_bin[operation]:06b}"
+    mid_code = "00000"
+    cop_code = "010001"
     
     #              r1    r2
     # mfc1         $a2,  $f2
     # 010001 00000 00110 00010 00000000000
 
-    binary = op_code + trail_zeroes + r1_code + r2_code + immediate_zeroes
+    binary = cop_code + mid_code + r1_code + r2_code + immediate_zeroes
     
     return f"{int(binary, 2):08X}"
 
+
+
+# Order: 2-3-1, rear zeroes
+
+def assemble_mtc1_hex_instruction(operation: str, r1: str, r2: str):
+    
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    immediate_zeroes = "00000000000"
+    mid_code = "00100"
+    cop_code = "010001"
+    
+    #              r1    r2
+    # cop    mtc1  $t6,  $f8
+    # 010001 00100 01110 01000 00000000000
+
+    binary = cop_code + mid_code + r1_code + r2_code + immediate_zeroes
+    
+    return f"{int(binary, 2):08X}"
 
 
 def process_load_and_store(offset ,operation, tokens) -> str:
@@ -448,6 +344,8 @@ def process_load_and_store(offset ,operation, tokens) -> str:
 
 def process_addiu(offset, operation, tokens) -> str:
     token_pattern = r"""
+        -0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
+        |
         0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
         |
         \d+              # decimal number, e.g. 0 or 12
@@ -485,7 +383,6 @@ def process_addiu(offset, operation, tokens) -> str:
         return assemble_hex_instruction(operation, r1, r2, mem_block)
     
     else:
-        
         [r1, r2, dest_offset_str] = results
         dest_offset = int(dest_offset_str, 16)
 
@@ -515,7 +412,7 @@ def process_lui(offset, operation, tokens) -> str:
 
         mem_block = int(mem_addr_resolved, 16)
 
-        return assemble_hex_instruction(operation, "zero", r1, mem_block)
+        return assemble_hex_instruction(operation, r1, "zero", mem_block)
     
     
     elif "hi" in results:
@@ -529,14 +426,14 @@ def process_lui(offset, operation, tokens) -> str:
 
         mem_block = int(mem_addr_resolved, 16)
 
-        return assemble_hex_instruction(operation, "zero", r1, mem_block)
+        return assemble_hex_instruction(operation, r1, "zero", mem_block)
     
     else:
         
         [r1, dest_offset_str] = results
         dest_offset = int(dest_offset_str, 16)
 
-        full = assemble_hex_instruction(operation, "zero", r1, dest_offset)
+        full = assemble_hex_instruction(operation, r1, "zero", dest_offset)
         
         return full
     
@@ -552,12 +449,40 @@ def process_lwc1(offset, operation, tokens) -> str:
     """
     results = re.findall(token_pattern, tokens, re.VERBOSE)
     
-    [r1, dest_offset_str, r2] = results
-    dest_offset = int(dest_offset_str, 16)
+    if "lo" in results:
+        
+        if len(results) == 4:
+            [r1, lo, mem_addr_raw, at] = results
+            mem_addr_resolved = get_lo_from(mem_addr_raw)
+            
+        else:
+            print("weird results:", results)
 
-    full = assemble_hex_instruction(operation, r1, r2, dest_offset)
+        mem_block = int(mem_addr_resolved, 16)
+
+        return assemble_hex_instruction(operation, r1, at, mem_block)
     
-    return full
+    
+    elif "hi" in results:
+        
+        if len(results) == 4:
+            [r1, hi, mem_addr_raw, at] = results
+            mem_addr_resolved = get_hi_from(mem_addr_raw)
+            
+        else:
+            print("weird results:", results)
+
+        mem_block = int(mem_addr_resolved, 16)
+
+        return assemble_hex_instruction(operation, r1, at, mem_block)
+    
+    else:
+        
+        [r1, dest_offset_str, r2] = results
+        dest_offset = int(dest_offset_str, 16)
+
+        full = assemble_hex_instruction(operation, r1, r2, dest_offset)
+        return full
     
 def process_addu(offset, operation, tokens) -> str:
     
@@ -703,7 +628,7 @@ def process_li(offset, operation, tokens) -> str:
 
 def process_mfc1(offset, operation, tokens) -> str:
 
-    # mfc1         $a2,  $f2
+    # cop    mfc1  $a2,  $f2
     # 010001 00000 00110 00010 00000000000
 
     token_pattern = r"""
@@ -718,6 +643,26 @@ def process_mfc1(offset, operation, tokens) -> str:
     [r1, r2] = results
     
     full = assemble_mfc1_hex_instruction(operation, r1, r2)
+    return full
+
+
+def process_mtc1(offset, operation, tokens) -> str:
+
+    # cop    mtc1  $a2,  $f2
+    # 010001 00100 01110 01000 00000000000
+
+    token_pattern = r"""
+        0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
+        |
+        \d+              # decimal number, e.g. 0 or 12
+        |
+        [A-Za-z_]\w*     # identifier, e.g. t6 or v0
+    """
+    results = re.findall(token_pattern, tokens, re.VERBOSE)
+    
+    [r1, r2] = results
+    
+    full = assemble_mtc1_hex_instruction(operation, r1, r2)
     return full
 
 
@@ -740,9 +685,30 @@ def process_break_if_equals_zero(offset, operation, tokens) -> str:
     return f"{int(op_code + r1_code + zero_code + delta_code, 2):08X}"
 
 
-
 def process_break(offset, operation, tokens) -> str:
      return process_break_if_equals_zero(offset, "beqz", f"zero,{tokens}")
+
+
+def process_subu(offset, operation, tokens) -> str:
+     
+    token_pattern = r"""
+        0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
+        |
+        \d+              # decimal number, e.g. 0 or 12
+        |
+        [A-Za-z_]\w*     # identifier, e.g. t6 or v0
+    """
+    results = re.findall(token_pattern, tokens, re.VERBOSE)
+    
+    [r1, r2, r3] = results
+
+    if "x" in r3:
+        r3_immediate = int(r3, 16)
+    else:
+        r3_immediate = get_register_bin(r3)
+
+    full = assemble_subu_hex_instruction(operation, r1, r2, r3_immediate)
+    return full
 
 
 def interpret_as_hex(offset, operation, tokens) -> str:
@@ -795,44 +761,119 @@ def interpret_as_hex(offset, operation, tokens) -> str:
     elif operation in ["mfc1"]:
         return process_mfc1(offset, operation, tokens)
     
+    elif operation in ["mtc1"]:
+        return process_mtc1(offset, operation, tokens)
+    
     elif operation in ["b"]:
         return process_break(offset, operation, tokens)
+
+    elif operation in ["nop"]:
+        return "00000000"
+
+    elif operation in ["subu"]:
+        return process_subu(offset, operation, tokens)
     
     return ""
 
-line_count = 0
-match_count = 0
-missing_ops = []
 
-hex_blocks = []
 
-for line in block.split("\n"):
+def parse_decomp_me_hex(decomp_asm_path):
 
-    # print(line)
-
-    if ":" not in line:
-        continue
-
-    [header, instruction] = line.split(":")
-    instruction = instruction[4:]
-
-    offset = int(header[-3:], 16)
-    operation = instruction[:8].strip()
-    tokens = instruction[8:]
-
-    hex = interpret_as_hex(offset=offset, operation=operation, tokens=tokens)
+    lines = []
+    with open(decomp_asm_path) as fp:
+        lines = fp.readlines()
     
-    print(f" {hex:08s} :: {offset:4X} {operation:8s} {tokens:20s}")
+    line_count = 0
+    match_count = 0
+    missing_ops = []
+    hex_blocks = []
+    operations = []
 
-    # print(operation, tokens, hex_block)
-    
-    line_count += 1
-    hex_blocks.append(hex)
-    
-    if hex != "":
-        match_count += 1
-    elif operation not in missing_ops:
-        missing_ops.append(operation)
-    
-print(f"{match_count} of {line_count} matched, {round(100 * match_count / line_count, 1)} %")
-print(f"Missing ops: {missing_ops}")
+    print(f"Parsing decomp file with {len(lines)} lines")
+
+    for line in lines:
+        line = line.strip()
+
+        if ":" not in line:
+            continue
+
+        [header, instruction] = line.split(":")
+        instruction = instruction[4:]
+
+        offset = int(header[-3:], 16)
+        operation = instruction[:8].strip()
+        tokens = instruction[8:]
+
+        hex = interpret_as_hex(offset=offset, operation=operation, tokens=tokens)
+        
+        line_count += 1
+        hex_blocks.append(hex)
+        operations.append(operation)
+        
+        if hex != "":
+            match_count += 1
+        elif operation not in missing_ops:
+            missing_ops.append(operation)
+        
+    print(f"{match_count} of {line_count} matched, {round(100 * match_count / line_count, 1)} %")
+    print(f"Missing ops: {missing_ops}")
+
+    return hex_blocks, operations
+
+
+def parse_actual_me_hex(actual_asm_path):
+
+    lines = []
+    with open(actual_asm_path) as fp:
+        lines = fp.readlines()
+
+    hex_blocks = []
+    operations = []
+
+    for line in lines:
+        line = line.strip()
+
+        if not line.startswith("/"):
+            continue
+
+        chunks = line.split(" ")
+        hex = chunks[3]
+        hex_blocks.append(hex)
+
+        operations.append(line[30:38].strip())
+        
+    return hex_blocks, operations
+
+
+def validate_decomp_me_asm(decomp_path, actual_path):
+    decomp_hex, decomp_instructions = parse_decomp_me_hex(decomp_path)
+    actual_hex, actual_instructions = parse_actual_me_hex(actual_path)
+
+    if len(decomp_hex) != len(actual_hex):
+        print(f"Diff sizes:: decomp: {len(decomp_hex)}, actual: {len(actual_hex)}")
+
+    bad_decomp_instructions = []
+
+    for (decomp, actual, decomp_instruction, actual_instruction) in zip(decomp_hex, actual_hex, decomp_instructions, actual_instructions):
+
+        if decomp == actual:
+            print(f"{decomp} == {actual} ✅")
+        else:
+            print(f"{decomp} != {actual} ❌, {decomp_instruction} vs. {actual_instruction}")
+
+            if decomp_instruction not in bad_decomp_instructions:
+                bad_decomp_instructions.append(decomp_instruction)
+
+    print("mismatched instructions: ", bad_decomp_instructions)
+
+def main():
+    func_name = "func_80008FE0"
+    decomp_path = f"decomp/{func_name}.decomp"
+    actual_path = f"decomp/{func_name}.actual"
+
+    validate_decomp_me_asm(decomp_path, actual_path)
+
+
+
+if __name__ == "__main__":
+    main()
