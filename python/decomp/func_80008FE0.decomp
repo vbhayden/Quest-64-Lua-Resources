@@ -58,7 +58,7 @@
   3b8:    cvt.d.s ft5,ft3
   3bc:    lui     at,0x4031
   3c0:    mul.d   ft1,ft5,ft0
-  3c4:    mtc1    at,ft2
+  3c4:    mtc1    at,ft2f
   3c8:    mtc1    zero,ft2
   3cc:    lui     v0,%hi(D_8007D0E0)
   3d0:    addiu   v0,v0,%lo(D_8007D0E0)
@@ -90,7 +90,7 @@
   438:    bnez    t0,4a8 ~>
   43c:    nop     
   440:    lui     at,0x3fe0
-  444:    mtc1    at,fv0
+  444:    mtc1    at,fv0f
   448:    mtc1    zero,fv0
   44c:    cvt.d.s ft0,ft5
   450:    lwc1    ft2,0x34(sp)

@@ -29,9 +29,13 @@ operation_to_bin = {
     "jal":   0b000011,
     "move":  0b100101,
     "or":    0b100101,
+    
     "beqzl": 0b000100,
     "beqz":  0b000100,
     "beql":  0b010100,
+    "beq":   0b000100,
+    "blez":  0b000110,
+    
     "sll":   0b000000,
     "slt":   0b101010,
     "subu":  0b100011,
@@ -39,9 +43,14 @@ operation_to_bin = {
     "mfc1":  0b010001,
 }
 
+SPECIAL_BREAKS = {
+    "bgez":  0b00001,
+}
+
 FLOAT_REGISTERS = {
     # Value / return registers
     "fv0":  0b00000,  # 0  ($f0)
+    "fv0f": 0b00001,  # 0  ($f1)
     "fv1":  0b00010,  # 2  ($f2)
 
     # Floating-point argument registers
@@ -54,6 +63,7 @@ FLOAT_REGISTERS = {
     "ft0":  0b00100,  # 4  ($f4)
     "ft1":  0b00110,  # 6  ($f6)
     "ft2":  0b01000,  # 8  ($f8)
+    "ft2f": 0b01001,  # 9  ($f9)
     "ft3":  0b01010,  # 10 ($f10)
     "ft4":  0b10000,  # 16 ($f16)
     "ft5":  0b10010,  # 18 ($f18)
@@ -62,9 +72,16 @@ FLOAT_REGISTERS = {
 }
 
 COP_FUNC_CODES = {
-    "mul.s": 0b000010,
-    "add.s": 0b000000,
-    "sub.s": 0b000001,
+    "mul.s":   0b000010,
+    "add.s":   0b000000,
+    "sub.s":   0b000001,
+    
+    "cvt.s.d": 0b100000,
+    "cvt.d.s": 0b100001,
+    
+    "mul.d":   0b000010,
+    "add.d":   0b000000,
+    "sub.d":   0b000001,
 }
 
 def get_register_bin(register: str) -> int:
@@ -163,9 +180,42 @@ def assemble_cop_arithmetic_hex_instruction(operation: str, r1: str, r2: str, r3
     r2_code = f"{get_register_bin(r2):05b}"
     r3_code = f"{get_register_bin(r3):05b}"
     
-    # print(operation, r1, r2, r3)
+    return f"{int(coprocessor + func_format + r3_code + r2_code + r1_code + func_code, 2):08X}"
+
+
+def assemble_cvt_s_d_hex_instruction(operation: str, r1: str, r2: str):
     
-    return f"{int(coprocessor + func_format + r2_code + r1_code + r3_code + func_code, 2):08X}"
+    # /* 9D84 80009184 46205320 */   cvt.s.d   $f12, $f10
+    #            cop                $f10  $f12
+    # 46205320 - 010001 10001 00000 01010 01100 100000
+    
+    coprocessor = "010001"
+    func_format = "10001"
+    zeroes = "0" * 5
+    func_code = f"{COP_FUNC_CODES[operation]:06b}"
+
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    
+    return f"{int(coprocessor + func_format + zeroes + r2_code + r1_code + func_code, 2):08X}"
+
+
+def assemble_cvt_d_s_hex_instruction(operation: str, r1: str, r2: str):
+    
+    # /* 9D84 80009184 46205320 */   cvt.s.d   $f12, $f10
+    #            cop                $f10  $f12
+    # 46205320 - 010001 10000 00000 10010 00100 100001
+    
+    coprocessor = "010001"
+    func_format = "10000"
+    zeroes = "0" * 5
+    func_code = f"{COP_FUNC_CODES[operation]:06b}"
+
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    
+    return f"{int(coprocessor + func_format + zeroes + r2_code + r1_code + func_code, 2):08X}"
+
 
 
 # Order: 2-3-1, rear zeroes
@@ -208,7 +258,7 @@ def assemble_subu_hex_instruction(operation: str, r1: str, r2: str, r3_immediate
     trail_zeroes = "00000"
     op_code = f"{operation_to_bin[operation]:06b}"
 
-    binary = lead_zeros + trail_zeroes + r2_code + r3_code + r1_code + op_code
+    binary = lead_zeros + r2_code + r3_code + r1_code + trail_zeroes + op_code
     
     return f"{int(binary, 2):08X}"
 
@@ -271,17 +321,59 @@ def assemble_mtc1_hex_instruction(operation: str, r1: str, r2: str):
     
     r1_code = f"{get_register_bin(r1):05b}"
     r2_code = f"{get_register_bin(r2):05b}"
+    
     immediate_zeroes = "00000000000"
+    
     mid_code = "00100"
     cop_code = "010001"
     
     #              r1    r2
     # cop    mtc1  $t6,  $f8
     # 010001 00100 01110 01000 00000000000
-
-    binary = cop_code + mid_code + r1_code + r2_code + immediate_zeroes
     
-    return f"{int(binary, 2):08X}"
+    binary = cop_code + mid_code + r1_code + r2_code + immediate_zeroes
+    full = f"{int(binary, 2):08X}"
+    
+    # print(full, "MTC1", r1, r1_code, r2, r2_code)
+        
+    return full
+
+
+def assemble_double_arithmetic_hex(operation: str, r1: str, r2: str, r3: str):
+
+    # add.d
+    # /* 9D78 80009178 46208280 */  add.d      $f10, $f16, $f0
+    # r1, f10: 01010
+    # r2, f16: 10000
+    # r3: f0 : 00000
+    #            cop    op    r3    r2    r1
+    # 46208280 - 010001 10001 00000 10000 01010 000000
+
+
+    # mul.d
+    # /* 9CCC 800090CC 46249182 */  mul.d      $f6, $f18, $f4
+
+    # r1, f6 : 00110
+    # r2, f18: 10010
+    # r3: f4 : 00100
+            
+    #            cop    fop   r3    r2    r1    op
+    # 46249182 - 010001 10001 00100 10010 00110 000010
+
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    r3_code = f"{get_register_bin(r3):05b}"
+    
+    immediate = f"{COP_FUNC_CODES[operation]:06b}"
+    
+    cop_code = "010001"
+    mid_code = "10001"
+    
+    binary = cop_code + mid_code + r3_code + r2_code + r1_code + immediate
+    full = f"{int(binary, 2):08X}"
+    
+    return full
+
 
 
 def process_load_and_store(offset ,operation, tokens) -> str:
@@ -533,6 +625,56 @@ def process_cop_arithmetic(offset, operation, tokens) -> str:
     full = assemble_cop_arithmetic_hex_instruction(operation, r1, r2, r3)
     return full
 
+
+def process_cvt_s_d(offset, operation, tokens) -> str:
+    
+    token_pattern = r"""
+        0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
+        |
+        \d+              # decimal number, e.g. 0 or 12
+        |
+        [A-Za-z_]\w*     # identifier, e.g. t6 or v0
+    """
+    results = re.findall(token_pattern, tokens, re.VERBOSE)
+    
+    [r1, r2] = results
+
+    full = assemble_cvt_s_d_hex_instruction(operation, r1, r2)
+    return full
+
+
+def process_cvt_d_s(offset, operation, tokens) -> str:
+    
+    token_pattern = r"""
+        0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
+        |
+        \d+              # decimal number, e.g. 0 or 12
+        |
+        [A-Za-z_]\w*     # identifier, e.g. t6 or v0
+    """
+    results = re.findall(token_pattern, tokens, re.VERBOSE)
+    
+    [r1, r2] = results
+
+    full = assemble_cvt_d_s_hex_instruction(operation, r1, r2)
+    return full
+
+def process_double_arithmetic(offset, operation, tokens) -> str:
+    
+    token_pattern = r"""
+        0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
+        |
+        \d+              # decimal number, e.g. 0 or 12
+        |
+        [A-Za-z_]\w*     # identifier, e.g. t6 or v0
+    """
+    results = re.findall(token_pattern, tokens, re.VERBOSE)
+    
+    [r1, r2, r3] = results
+
+    full = assemble_double_arithmetic_hex(operation, r1, r2, r3)
+    return full
+
 def process_jr(offset, operation, tokens) -> str:
     
     special = "0" * 6
@@ -650,7 +792,7 @@ def process_mtc1(offset, operation, tokens) -> str:
 
     # cop    mtc1  $a2,  $f2
     # 010001 00100 01110 01000 00000000000
-
+    
     token_pattern = r"""
         0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
         |
@@ -666,16 +808,17 @@ def process_mtc1(offset, operation, tokens) -> str:
     return full
 
 
-def process_break_if_equals_zero(offset, operation, tokens) -> str:
-     
-    [r1, jump] = tokens.split(",")
+def process_beq(offset, operation, tokens) -> str:
+    
+    print(tokens)
+    [r1, r2, jump] = tokens.split(",")
     
     if " " in jump:
         jump = jump.split(" ")[0]
     
     call_offset = offset
     jump_offset = int(jump, 16)
-    op_delta = (jump_offset - call_offset) // 4
+    op_delta = (jump_offset - call_offset) // 4 - 1
     
     op_code = f"{operation_to_bin[operation]:06b}"
     r1_code = f"{get_register_bin(r1):05b}"
@@ -685,8 +828,91 @@ def process_break_if_equals_zero(offset, operation, tokens) -> str:
     return f"{int(op_code + r1_code + zero_code + delta_code, 2):08X}"
 
 
+def process_beql(offset, operation, tokens) -> str:
+    
+    [r1, r2, jump] = tokens.split(",")
+    
+    if " " in jump:
+        jump = jump.split(" ")[0]
+    
+    call_offset = offset
+    jump_offset = int(jump, 16)
+    op_delta = (jump_offset - call_offset) // 4 - 1
+    
+    op_code = f"{operation_to_bin[operation]:06b}"
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    zero_code = "0" * 5
+    delta_code = f"{int(op_delta):016b}"
+
+    return f"{int(op_code + r1_code + zero_code + delta_code, 2):08X}"
+    
+def process_beqzl(offset, operation, tokens) -> str:
+    [r1, jump] = tokens.split(",")
+    return process_beql(offset, "beql", ",".join([r1, "zero", jump]))  
+
+def process_beqz(offset, operation, tokens) -> str:
+     
+    [r1, jump] = tokens.split(",")
+    
+    if " " in jump:
+        jump = jump.split(" ")[0]
+    
+    call_offset = offset
+    jump_offset = int(jump, 16)
+    op_delta = (jump_offset - call_offset) // 4 - 1
+    
+    op_code = f"{operation_to_bin[operation]:06b}"
+    r1_code = f"{get_register_bin(r1):05b}"
+    zero_code = "0" * 5
+    delta_code = f"{int(op_delta):016b}"
+
+    return f"{int(op_code + r1_code + zero_code + delta_code, 2):08X}"
+
+
+def process_bgez(offset, operation, tokens) -> str:
+     
+    [r1, jump] = tokens.split(",")
+    
+    if " " in jump:
+        jump = jump.split(" ")[0]
+    
+    call_offset = offset
+    jump_offset = int(jump, 16)
+    op_delta = (jump_offset - call_offset) // 4 - 1
+    
+    regimm = "000001"
+    r1_code = f"{get_register_bin(r1):05b}"
+    op_code = f"{SPECIAL_BREAKS[operation]:05b}"
+    delta_code = f"{int(op_delta):016b}"
+
+    return f"{int(regimm + r1_code + op_code + delta_code, 2):08X}"
+
+
+
+def process_blez(offset, operation, tokens) -> str:
+     
+    [r1, jump] = tokens.split(",")
+    
+    if " " in jump:
+        jump = jump.split(" ")[0]
+    
+    call_offset = offset
+    jump_offset = int(jump, 16)
+    op_delta = (jump_offset - call_offset) // 4 - 1
+    
+    r1_code = f"{get_register_bin(r1):05b}"
+    op_code = f"{operation_to_bin[operation]:06b}"
+    zeroes = "0" * 5
+    delta_code = f"{int(op_delta):016b}"
+
+    return f"{int(op_code + r1_code + zeroes + delta_code, 2):08X}"
+
+
+
+
 def process_break(offset, operation, tokens) -> str:
-     return process_break_if_equals_zero(offset, "beqz", f"zero,{tokens}")
+     return process_beqz(offset, "beqz", f"zero,{tokens}")
 
 
 def process_subu(offset, operation, tokens) -> str:
@@ -746,9 +972,24 @@ def interpret_as_hex(offset, operation, tokens) -> str:
     elif operation in ["or", "move"]:
         return process_or(offset, operation, tokens)
     
-    elif operation in ["beqzl", "beqz"]:
-        return process_break_if_equals_zero(offset, operation, tokens)
+    elif operation in ["beql", "beq"]:
+        return process_beq(offset, operation, tokens)
     
+    elif operation in ["beqzl"]:
+        return process_beqzl(offset, operation, tokens)
+    
+    elif operation in ["beqz"]:
+        return process_beqz(offset, operation, tokens)
+    
+    elif operation in ["bgez"]:
+        return process_bgez(offset, operation, tokens)
+    
+    elif operation in ["blez"]:
+        return process_blez(offset, operation, tokens)
+        
+    elif operation in ["b"]:
+        return process_break(offset, operation, tokens)
+        
     elif operation in ["sll"]:
         return process_sll(offset, operation, tokens)
     
@@ -764,8 +1005,14 @@ def interpret_as_hex(offset, operation, tokens) -> str:
     elif operation in ["mtc1"]:
         return process_mtc1(offset, operation, tokens)
     
-    elif operation in ["b"]:
-        return process_break(offset, operation, tokens)
+    elif operation in ["cvt.s.d"]:
+        return process_cvt_s_d(offset, operation, tokens)
+    
+    elif operation in ["cvt.d.s"]:
+        return process_cvt_d_s(offset, operation, tokens)
+    
+    elif operation in ["add.d", "mul.d"]:
+        return process_double_arithmetic(offset, operation, tokens)
 
     elif operation in ["nop"]:
         return "00000000"
@@ -807,7 +1054,7 @@ def parse_decomp_me_hex(decomp_asm_path):
         hex = interpret_as_hex(offset=offset, operation=operation, tokens=tokens)
         
         line_count += 1
-        hex_blocks.append(hex)
+        hex_blocks.append(hex if hex != "" else "00000000")
         operations.append(operation)
         
         if hex != "":
@@ -857,7 +1104,7 @@ def validate_decomp_me_asm(decomp_path, actual_path):
     for (decomp, actual, decomp_instruction, actual_instruction) in zip(decomp_hex, actual_hex, decomp_instructions, actual_instructions):
 
         if decomp == actual:
-            print(f"{decomp} == {actual} ✅")
+            print(f"{decomp} == {actual} ✅, {decomp_instruction} vs. {actual_instruction}")
         else:
             print(f"{decomp} != {actual} ❌, {decomp_instruction} vs. {actual_instruction}")
 
