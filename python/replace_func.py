@@ -23,6 +23,7 @@ operation_to_bin = {
     "addiu": 0b001001,
     "lui"  : 0b001111,
     "lwc1":  0b110001,
+    "ldc1":  0b110101,
     "addu":  0b100001,
     "andi":  0b001100,
     "jr":    0b001000,
@@ -35,6 +36,7 @@ operation_to_bin = {
     "beql":  0b010100,
     "beq":   0b000100,
     "blez":  0b000110,
+    "bne":   0b000101,
     
     "sll":   0b000000,
     "slt":   0b101010,
@@ -76,6 +78,7 @@ COP_FUNC_CODES = {
     "add.s":   0b000000,
     "sub.s":   0b000001,
     
+    "cvt.s.w": 0b100000,
     "cvt.s.d": 0b100000,
     "cvt.d.s": 0b100001,
     
@@ -181,6 +184,26 @@ def assemble_cop_arithmetic_hex_instruction(operation: str, r1: str, r2: str, r3
     r3_code = f"{get_register_bin(r3):05b}"
     
     return f"{int(coprocessor + func_format + r3_code + r2_code + r1_code + func_code, 2):08X}"
+
+
+def assemble_cvt_s_w_hex_instruction(operation: str, r1: str, r2: str):
+    
+    # /* 9CAC 800090AC 468042A0 */   cvt.s.w   $f10, $f8
+    # r1, f10: 01010
+    # r2, f8 : 01000
+    #            cop    fop         r2    r1    op
+    # 468042A0 - 010001 10100 00000 01000 01010 100000
+    
+    coprocessor = "010001"
+    func_format = "10100"
+    zeroes = "0" * 5
+    func_code = f"{COP_FUNC_CODES[operation]:06b}"
+
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    
+    return f"{int(coprocessor + func_format + zeroes + r2_code + r1_code + func_code, 2):08X}"
+
 
 
 def assemble_cvt_s_d_hex_instruction(operation: str, r1: str, r2: str):
@@ -530,7 +553,7 @@ def process_lui(offset, operation, tokens) -> str:
         return full
     
     
-def process_lwc1(offset, operation, tokens) -> str:
+def process_load_into_cop(offset, operation, tokens) -> str:
     
     token_pattern = r"""
         0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
@@ -575,6 +598,8 @@ def process_lwc1(offset, operation, tokens) -> str:
 
         full = assemble_hex_instruction(operation, r1, r2, dest_offset)
         return full
+    
+    
     
 def process_addu(offset, operation, tokens) -> str:
     
@@ -640,6 +665,23 @@ def process_cvt_s_d(offset, operation, tokens) -> str:
     [r1, r2] = results
 
     full = assemble_cvt_s_d_hex_instruction(operation, r1, r2)
+    return full
+
+
+def process_cvt_s_w(offset, operation, tokens) -> str:
+    
+    token_pattern = r"""
+        0x[0-9A-Fa-f]+   # hexadecimal number, e.g. 0x34
+        |
+        \d+              # decimal number, e.g. 0 or 12
+        |
+        [A-Za-z_]\w*     # identifier, e.g. t6 or v0
+    """
+    results = re.findall(token_pattern, tokens, re.VERBOSE)
+    
+    [r1, r2] = results
+
+    full = assemble_cvt_s_w_hex_instruction(operation, r1, r2)
     return full
 
 
@@ -910,6 +952,36 @@ def process_blez(offset, operation, tokens) -> str:
 
 
 
+def process_bnez(offset, operation, tokens) -> str:
+     
+    [r1, jump] = tokens.split(",")
+    
+    if " " in jump:
+        jump = jump.split(" ")[0]
+        
+    return process_bne(offset, "bne", ",".join([r1, "zero", jump]))
+
+
+def process_bne(offset, operation, tokens) -> str:
+     
+    [r1, r2, jump] = tokens.split(",")
+    
+    if " " in jump:
+        jump = jump.split(" ")[0]
+    
+    call_offset = offset
+    jump_offset = int(jump, 16)
+    op_delta = (jump_offset - call_offset) // 4 - 1
+    
+    r1_code = f"{get_register_bin(r1):05b}"
+    r2_code = f"{get_register_bin(r2):05b}"
+    op_code = f"{operation_to_bin[operation]:06b}"
+    delta_code = f"{int(op_delta):016b}"
+
+    return f"{int(op_code + r1_code + r2_code + delta_code, 2):08X}"
+
+
+
 
 def process_break(offset, operation, tokens) -> str:
      return process_beqz(offset, "beqz", f"zero,{tokens}")
@@ -948,8 +1020,8 @@ def interpret_as_hex(offset, operation, tokens) -> str:
     elif operation in ["lui"]:
         return process_lui(offset, operation, tokens)
     
-    elif operation in ["lwc1"]:
-        return process_lwc1(offset, operation, tokens)    
+    elif operation in ["lwc1", "ldc1"]:
+        return process_load_into_cop(offset, operation, tokens)    
     
     elif operation in ["addu"]:
         return process_addu(offset, operation, tokens)
@@ -986,6 +1058,9 @@ def interpret_as_hex(offset, operation, tokens) -> str:
     
     elif operation in ["blez"]:
         return process_blez(offset, operation, tokens)
+    
+    elif operation in ["bnez"]:
+        return process_bnez(offset, operation, tokens)
         
     elif operation in ["b"]:
         return process_break(offset, operation, tokens)
@@ -1004,6 +1079,9 @@ def interpret_as_hex(offset, operation, tokens) -> str:
     
     elif operation in ["mtc1"]:
         return process_mtc1(offset, operation, tokens)
+
+    elif operation in ["cvt.s.w"]:
+        return process_cvt_s_w(offset, operation, tokens)
     
     elif operation in ["cvt.s.d"]:
         return process_cvt_s_d(offset, operation, tokens)
